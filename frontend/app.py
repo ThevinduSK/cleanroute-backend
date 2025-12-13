@@ -264,6 +264,11 @@ def districts():
     """Bins by district page"""
     return render_template('districts.html')
 
+@app.route('/iot')
+def iot_dashboard():
+    """IoT Performance Dashboard page"""
+    return render_template('iot_dashboard.html')
+
 @app.route('/api/bins')
 def get_bins():
     """Get all bins with current status"""
@@ -672,6 +677,78 @@ def get_bins_latest():
     """Proxy bins/latest endpoint to FastAPI backend."""
     try:
         resp = requests.get(f"{BACKEND_URL}/bins/latest", timeout=5)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+# =============================================================================
+# IOT ENDPOINTS PROXY
+# =============================================================================
+
+@app.route('/api/iot/metrics')
+def iot_metrics():
+    """Proxy IoT metrics endpoint to FastAPI backend."""
+    try:
+        resp = requests.get(f"{BACKEND_URL}/iot/metrics", timeout=10)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/iot/device/<bin_id>/heartbeats')
+def iot_device_heartbeats(bin_id):
+    """Proxy device heartbeats endpoint."""
+    try:
+        resp = requests.get(f"{BACKEND_URL}/iot/device/{bin_id}/heartbeats", timeout=5)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/iot/device/<bin_id>/power')
+def iot_device_power(bin_id):
+    """Proxy device power profile endpoint."""
+    try:
+        resp = requests.get(f"{BACKEND_URL}/iot/device/{bin_id}/power", timeout=5)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/iot/device/<bin_id>/shadow')
+def iot_device_shadow(bin_id):
+    """Proxy device shadow endpoint."""
+    try:
+        resp = requests.get(f"{BACKEND_URL}/iot/device/{bin_id}/shadow", timeout=5)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/iot/device/<bin_id>/diagnostics')
+def iot_device_diagnostics(bin_id):
+    """Proxy device diagnostics endpoint."""
+    try:
+        resp = requests.get(f"{BACKEND_URL}/iot/device/{bin_id}/diagnostics", timeout=5)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/iot/device/<bin_id>/diagnostic', methods=['POST'])
+def iot_request_diagnostic(bin_id):
+    """Proxy request diagnostic endpoint."""
+    try:
+        from flask import request
+        auth_header = request.headers.get('Authorization')
+        headers = {'Authorization': auth_header} if auth_header else {}
+        resp = requests.post(
+            f"{BACKEND_URL}/iot/device/{bin_id}/diagnostic",
+            json=request.get_json(),
+            headers=headers,
+            timeout=10
+        )
         return jsonify(resp.json()), resp.status_code
     except requests.exceptions.RequestException as e:
         return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503

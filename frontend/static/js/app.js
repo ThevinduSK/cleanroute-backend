@@ -699,57 +699,169 @@ function fitToAllBins() {
     showNotification(`Showing ${validBins.length} bins`, 'info');
 }
 
+// Current bin modal state
+let currentModalBinId = null;
+let currentModalTab = 'overview';
+let modalIotData = {};
+
 // Show bin details in modal
 async function showBinDetails(binId) {
     showLoading(true);
+    currentModalBinId = binId;
+    currentModalTab = 'overview';
+    modalIotData = {};
     
     try {
         // Get bin info
         const bin = allBins.find(b => b.bin_id === binId);
         
-        // Get history
-        const response = await fetch(`/api/bins/${binId}/history`);
-        const history = await response.json();
+        // Get history and IoT data in parallel
+        const [historyRes, heartbeats, power, shadow, diagnostics] = await Promise.all([
+            fetch(`/api/bins/${binId}/history`).then(r => r.json()),
+            fetch(`/api/iot/device/${binId}/heartbeats`).then(r => r.json()).catch(() => []),
+            fetch(`/api/iot/device/${binId}/power`).then(r => r.json()).catch(() => null),
+            fetch(`/api/iot/device/${binId}/shadow`).then(r => r.json()).catch(() => null),
+            fetch(`/api/iot/device/${binId}/diagnostics`).then(r => r.json()).catch(() => [])
+        ]);
         
-        // Build modal content
+        modalIotData = { history: historyRes, heartbeats, power, shadow, diagnostics, bin };
+        
+        // Build modal content with tabs
         const modalBody = document.getElementById('modalBody');
         modalBody.innerHTML = `
-            <div class="bin-detail-grid">
-                <div class="detail-card">
-                    <div class="detail-label">Current Fill Level</div>
-                    <div class="detail-value">${Math.round(bin.current_fill_level)}%</div>
-                </div>
-                <div class="detail-card">
-                    <div class="detail-label">Battery Level</div>
-                    <div class="detail-value">${Math.round(bin.battery_level)}%</div>
-                </div>
-                <div class="detail-card">
-                    <div class="detail-label">Capacity</div>
-                    <div class="detail-value">${bin.capacity_liters}L</div>
-                </div>
-                <div class="detail-card">
-                    <div class="detail-label">Status</div>
-                    <div class="detail-value" style="font-size: 18px; text-transform: capitalize;">${bin.status}</div>
-                </div>
+            <div class="bin-modal-tabs">
+                <button class="bin-tab-btn active" onclick="switchBinModalTab('overview')">Overview</button>
+                <button class="bin-tab-btn" onclick="switchBinModalTab('iot')">IoT Status</button>
+                <button class="bin-tab-btn" onclick="switchBinModalTab('history')">History</button>
             </div>
-            
-            <div class="chart-container">
-                <div class="chart-title">Fill Level History (Last 30 Days)</div>
-                <canvas id="historyChart"></canvas>
-            </div>
+            <div id="binModalTabContent"></div>
         `;
         
         document.getElementById('modalTitle').textContent = `${bin.location} (${binId})`;
         document.getElementById('binModal').classList.add('active');
         
-        // Draw chart
-        setTimeout(() => drawHistoryChart(history), 100);
+        // Render default tab
+        renderBinModalTab();
         
     } catch (error) {
         console.error('Error loading bin details:', error);
         showNotification('Failed to load bin details', 'error');
     } finally {
         showLoading(false);
+    }
+}
+
+function switchBinModalTab(tab) {
+    currentModalTab = tab;
+    document.querySelectorAll('.bin-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.toLowerCase().includes(tab));
+    });
+    renderBinModalTab();
+}
+
+function renderBinModalTab() {
+    const container = document.getElementById('binModalTabContent');
+    const { bin, history, heartbeats, power, shadow, diagnostics } = modalIotData;
+    
+    switch (currentModalTab) {
+        case 'overview':
+            container.innerHTML = `
+                <div class="bin-detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Current Fill Level</div>
+                        <div class="detail-value">${Math.round(bin.current_fill_level)}%</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Battery Level</div>
+                        <div class="detail-value">${Math.round(bin.battery_level)}%</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Capacity</div>
+                        <div class="detail-value">${bin.capacity_liters}L</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value" style="font-size: 18px; text-transform: capitalize;">${bin.status}</div>
+                    </div>
+                </div>
+            `;
+            break;
+            
+        case 'iot':
+            const lastHb = heartbeats?.[0] || {};
+            const pw = power || {};
+            const sh = shadow || {};
+            const dg = diagnostics?.[0] || {};
+            
+            container.innerHTML = `
+                <div class="bin-detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Firmware</div>
+                        <div class="detail-value">${sh.firmware_version || 'Unknown'}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Sleep Mode</div>
+                        <div class="detail-value">${sh.sleep_mode ? 'Yes' : 'No'}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">RSSI</div>
+                        <div class="detail-value">${lastHb.rssi_dbm || '--'} dBm</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Heartbeats (24h)</div>
+                        <div class="detail-value">${heartbeats?.length || 0}</div>
+                    </div>
+                </div>
+                <div class="iot-section-title">Power Profile</div>
+                <div class="bin-detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Battery Voltage</div>
+                        <div class="detail-value">${pw.battery_voltage || '--'}V</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Solar Voltage</div>
+                        <div class="detail-value">${pw.solar_voltage || '--'}V</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Power Mode</div>
+                        <div class="detail-value">${pw.power_mode || 'normal'}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Current Draw</div>
+                        <div class="detail-value">${pw.current_draw_ma || '--'} mA</div>
+                    </div>
+                </div>
+                <div class="iot-section-title">Diagnostics</div>
+                <div class="bin-detail-grid">
+                    <div class="detail-card">
+                        <div class="detail-label">Uptime</div>
+                        <div class="detail-value">${dg.uptime_seconds ? Math.round(dg.uptime_seconds / 3600) + 'h' : '--'}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Free Memory</div>
+                        <div class="detail-value">${dg.free_memory_bytes ? Math.round(dg.free_memory_bytes / 1024) + ' KB' : '--'}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Error Count</div>
+                        <div class="detail-value">${dg.error_count || 0}</div>
+                    </div>
+                    <div class="detail-card">
+                        <div class="detail-label">Restart Count</div>
+                        <div class="detail-value">${dg.restart_count || 0}</div>
+                    </div>
+                </div>
+            `;
+            break;
+            
+        case 'history':
+            container.innerHTML = `
+                <div class="chart-container">
+                    <div class="chart-title">Fill Level History (Last 30 Days)</div>
+                    <canvas id="historyChart"></canvas>
+                </div>
+            `;
+            setTimeout(() => drawHistoryChart(history), 100);
+            break;
     }
 }
 

@@ -149,6 +149,47 @@ body {
     letter-spacing: 1px;
 }
 
+/* Navigation Links */
+.nav-links {
+    display: flex;
+    gap: 10px;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+}
+
+.nav-link:hover {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    box-shadow: var(--shadow-neon);
+    transform: translateY(-2px);
+}
+
+.nav-link.active {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: var(--neon-green);
+    color: var(--neon-green);
+}
+
+.nav-link i {
+    font-size: 16px;
+}
+
 /* Container */
 .container {
     display: flex;
@@ -644,6 +685,47 @@ body {
 .popup-btn:hover {
     background: var(--neon-green);
     box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+}
+
+/* Bin Modal Tabs */
+.bin-modal-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+}
+
+.bin-tab-btn {
+    background: rgba(100, 100, 100, 0.1);
+    border: 1px solid rgba(100, 100, 100, 0.3);
+    color: var(--text-secondary);
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.bin-tab-btn:hover {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+}
+
+.bin-tab-btn.active {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: var(--neon-green);
+    color: var(--neon-green);
+}
+
+.iot-section-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.9rem;
+    color: var(--neon-cyan);
+    margin: 20px 0 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--border-color);
 }
 
 /* Responsive Design */

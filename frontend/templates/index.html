@@ -23,6 +23,11 @@
             <i class="fas fa-recycle"></i>
             <span class="logo-text">CLEAN<span class="highlight">ROUTE</span></span>
         </div>
+        <nav class="nav-links">
+            <a href="/" class="nav-link active"><i class="fas fa-map"></i> Map</a>
+            <a href="/districts" class="nav-link"><i class="fas fa-city"></i> Districts</a>
+            <a href="/iot" class="nav-link"><i class="fas fa-microchip"></i> IoT Dashboard</a>
+        </nav>
         <div class="stats-bar">
             <div class="stat-item">
                 <i class="fas fa-trash-alt"></i>
@@ -207,6 +212,23 @@
                         <i class="fas fa-sign-out-alt"></i> Logout
                     </button>
                 </div>
+            </div>
+
+            <!-- IoT Metrics Panel (Admin Only) -->
+            <div class="control-panel" id="iotMetricsPanel" style="margin-top: 15px; display: none;">
+                <h2 class="panel-title">
+                    <i class="fas fa-microchip"></i> IoT Metrics
+                </h2>
+                
+                <div id="iotMetricsContent">
+                    <div style="color: #8892b0; font-size: 0.85rem; text-align: center; padding: 20px;">
+                        <i class="fas fa-spinner fa-spin"></i> Loading metrics...
+                    </div>
+                </div>
+                
+                <button class="btn btn-secondary" onclick="refreshIoTMetrics()" style="margin-top: 10px; width: 100%;">
+                    <i class="fas fa-sync-alt"></i> Refresh Metrics
+                </button>
             </div>
 
             <!-- Route Info -->

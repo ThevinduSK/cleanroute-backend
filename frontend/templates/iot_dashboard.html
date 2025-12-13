@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CleanRoute - IoT Dashboard</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <style>
+        .dashboard-container {
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .dashboard-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 2rem;
+            color: #00ff88;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, rgba(10, 25, 47, 0.9), rgba(17, 34, 64, 0.95));
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .metric-card h3 {
+            color: #00ff88;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .metric-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.5rem;
+            color: #fff;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            color: #8892b0;
+            font-size: 0.9rem;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+        
+        .metric-row-label {
+            color: #8892b0;
+        }
+        
+        .metric-row-value {
+            color: #fff;
+            font-weight: 600;
+        }
+        
+        .status-good { color: #00ff88; }
+        .status-warning { color: #ffaa00; }
+        .status-critical { color: #ff0055; }
+        
+        .protocol-badge {
+            display: inline-block;
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid #00ff88;
+            border-radius: 20px;
+            padding: 5px 15px;
+            color: #00ff88;
+            font-size: 0.85rem;
+            margin-right: 10px;
+        }
+        
+        .devices-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .devices-table th,
+        .devices-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .devices-table th {
+            color: #00ff88;
+            font-weight: 600;
+            background: rgba(0, 255, 136, 0.1);
+        }
+        
+        .devices-table td {
+            color: #fff;
+        }
+        
+        .devices-table tr:hover {
+            background: rgba(0, 255, 136, 0.05);
+        }
+        
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-dot.online { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+        .status-dot.offline { background: #ff0055; }
+        .status-dot.sleeping { background: #666; }
+        
+        .back-link {
+            color: #00ff88;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        
+        .refresh-btn {
+            background: linear-gradient(135deg, #0088ff, #0066cc);
+            border: none;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 136, 255, 0.4);
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .feature-list li {
+            padding: 8px 0;
+            color: #8892b0;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .feature-list li i {
+            color: #00ff88;
+            margin-top: 3px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #8892b0;
+        }
+        
+        .loading i {
+            font-size: 3rem;
+            color: #00ff88;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <i class="fas fa-recycle"></i>
+            <span class="logo-text">CLEAN<span class="highlight">ROUTE</span></span>
+        </div>
+        <nav class="nav-links">
+            <a href="/" class="nav-link"><i class="fas fa-map"></i> Map</a>
+            <a href="/districts" class="nav-link"><i class="fas fa-city"></i> Districts</a>
+            <a href="/iot" class="nav-link active"><i class="fas fa-microchip"></i> IoT Dashboard</a>
+        </nav>
+    </header>
+
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1 class="dashboard-title">
+                <i class="fas fa-microchip"></i> IoT Performance Dashboard
+            </h1>
+            <button class="refresh-btn" onclick="loadMetrics()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+
+        <div id="metricsContent">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading IoT metrics...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let metricsData = null;
+        let devicesData = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadMetrics();
+            loadDevices();
+            // Auto-refresh every 30 seconds
+            setInterval(loadMetrics, 30000);
+        });
+
+        async function loadMetrics() {
+            try {
+                const response = await fetch('/api/iot/metrics');
+                metricsData = await response.json();
+                renderMetrics();
+            } catch (error) {
+                console.error('Error loading metrics:', error);
+                document.getElementById('metricsContent').innerHTML = `
+                    <div class="metric-card">
+                        <p style="color: #ff0055;">Failed to load metrics. Make sure the backend is running.</p>
+                        <p style="color: #8892b0; margin-top: 10px;">Error: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/bins');
+                devicesData = await response.json();
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+
+        function renderMetrics() {
+            if (!metricsData) return;
+
+            const m = metricsData;
+            const proto = m.protocol || {};
+            const msg = m.message_throughput || {};
+            const cmd = m.command_delivery || {};
+            const dev = m.device_connectivity || {};
+            const pwr = m.power_efficiency || {};
+            const net = m.network_performance || {};
+            const features = m.constrained_iot_features || {};
+
+            document.getElementById('metricsContent').innerHTML = `
+                <!-- Protocol Info -->
+                <div style="margin-bottom: 20px;">
+                    <span class="protocol-badge"><i class="fas fa-network-wired"></i> ${proto.type || 'MQTT'} v${proto.version || '3.1.1'}</span>
+                    <span class="protocol-badge"><i class="fas fa-lock"></i> TLS ${proto.tls_enabled ? 'Enabled' : 'Disabled'}</span>
+                    <span class="protocol-badge"><i class="fas fa-signal"></i> QoS ${proto.qos_level || 1}</span>
+                    <span class="protocol-badge"><i class="fas fa-plug"></i> Port ${proto.port || 8883}</span>
+                </div>
+
+                <div class="metrics-grid">
+                    <!-- Device Connectivity -->
+                    <div class="metric-card">
+                        <h3><i class="fas fa-broadcast-tower"></i> Device Connectivity</h3>
+                        <div class="metric-value">${dev.online || 0}/${dev.total_devices || 0}</div>
+                        <div class="metric-label">Devices Online</div>
+                        <div style="margin-top: 15px;">
+                            <div class="metric-row">
+                                <span class="metric-row-label">Online Rate</span>
+                                <span class="metric-row-value ${getStatusClass(dev.online_rate_pct, 80, 50)}">${dev.online_rate_pct || 0}%</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Sleeping</span>
+                                <span class="metric-row-value">${dev.sleeping || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Offline</span>
+                                <span class="metric-row-value status-critical">${dev.offline || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Message Throughput -->
+                    <div class="metric-card">
+                        <h3><i class="fas fa-envelope"></i> Message Throughput</h3>
+                        <div class="metric-value">${msg.total_messages_24h || 0}</div>
+                        <div class="metric-label">Messages (24h)</div>
+                        <div style="margin-top: 15px;">
+                            <div class="metric-row">
+                                <span class="metric-row-label">Active Devices</span>
+                                <span class="metric-row-value">${msg.active_devices || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Avg Latency</span>
+                                <span class="metric-row-value">${msg.avg_latency_seconds || 0}s</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Payload Size</span>
+                                <span class="metric-row-value">${msg.payload_size_estimate_bytes || 150} bytes</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Command Delivery -->
+                    <div class="metric-card">
+                        <h3><i class="fas fa-terminal"></i> Command Delivery</h3>
+                        <div class="metric-value ${getStatusClass(cmd.ack_success_rate_pct, 90, 70)}">${cmd.ack_success_rate_pct || 0}%</div>
+                        <div class="metric-label">ACK Success Rate</div>
+                        <div style="margin-top: 15px;">
+                            <div class="metric-row">
+                                <span class="metric-row-label">Total Commands</span>
+                                <span class="metric-row-value">${cmd.total_commands_24h || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Acknowledged</span>
+                                <span class="metric-row-value status-good">${cmd.acknowledged || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Failed</span>
+                                <span class="metric-row-value ${cmd.failed > 0 ? 'status-critical' : ''}">${cmd.failed || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Avg Retries</span>
+                                <span class="metric-row-value">${cmd.avg_retries || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Power Efficiency -->
+                    <div class="metric-card">
+                        <h3><i class="fas fa-battery-three-quarters"></i> Power & Battery</h3>
+                        <div class="metric-value">${pwr.avg_battery_voltage || 0}V</div>
+                        <div class="metric-label">Avg Battery Voltage</div>
+                        <div style="margin-top: 15px;">
+                            <div class="metric-row">
+                                <span class="metric-row-label">Min Voltage</span>
+                                <span class="metric-row-value ${pwr.min_battery_voltage < 3.5 ? 'status-critical' : ''}">${pwr.min_battery_voltage || 0}V</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Max Voltage</span>
+                                <span class="metric-row-value">${pwr.max_battery_voltage || 0}V</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Critical Battery</span>
+                                <span class="metric-row-value status-critical">${pwr.critical_battery_devices || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Low Battery</span>
+                                <span class="metric-row-value status-warning">${pwr.low_battery_devices || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Network Performance -->
+                    <div class="metric-card">
+                        <h3><i class="fas fa-wifi"></i> Network Performance</h3>
+                        <div class="metric-value">${net.avg_rssi_dbm || 0}</div>
+                        <div class="metric-label">Avg RSSI (dBm)</div>
+                        <div style="margin-top: 15px;">
+                            <div class="metric-row">
+                                <span class="metric-row-label">Heartbeats (24h)</span>
+                                <span class="metric-row-value">${net.heartbeats_24h || 0}</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Min RSSI</span>
+                                <span class="metric-row-value">${net.min_rssi_dbm || 0} dBm</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Avg Uptime</span>
+                                <span class="metric-row-value">${net.avg_device_uptime_hours || 0}h</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="metric-row-label">Avg Free Memory</span>
+                                <span class="metric-row-value">${net.avg_free_memory_kb || 0} KB</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Constrained IoT Features -->
+                    <div class="metric-card">
+                        <h3><i class="fas fa-cogs"></i> Constrained IoT Features</h3>
+                        <ul class="feature-list">
+                            <li><i class="fas fa-check"></i> ${features.lightweight_protocol || 'MQTT Protocol'}</li>
+                            <li><i class="fas fa-check"></i> ${features.qos_reliability || 'QoS 1 Delivery'}</li>
+                            <li><i class="fas fa-check"></i> ${features.power_management || 'Sleep/Wake Power Management'}</li>
+                            <li><i class="fas fa-check"></i> ${features.message_optimization || 'Compact Payloads'}</li>
+                            <li><i class="fas fa-check"></i> ${features.bandwidth_efficiency || 'Event-driven Telemetry'}</li>
+                            <li><i class="fas fa-check"></i> ${features.offline_support || 'Device Shadow Support'}</li>
+                            <li><i class="fas fa-check"></i> ${features.retry_mechanism || 'Command ACK/Retry'}</li>
+                            <li><i class="fas fa-check"></i> ${features.ota_updates || 'OTA Firmware Updates'}</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Devices Table -->
+                <div class="metric-card" style="margin-top: 20px;">
+                    <h3><i class="fas fa-list"></i> Device Status Overview</h3>
+                    <table class="devices-table">
+                        <thead>
+                            <tr>
+                                <th>Device ID</th>
+                                <th>Status</th>
+                                <th>Fill Level</th>
+                                <th>Battery</th>
+                                <th>Last Seen</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="devicesTableBody">
+                            ${renderDevicesTable()}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderDevicesTable() {
+            if (!devicesData || devicesData.length === 0) {
+                return '<tr><td colspan="6" style="text-align: center; color: #8892b0;">No devices found</td></tr>';
+            }
+
+            return devicesData.map(device => {
+                const status = device.sleep_mode ? 'sleeping' : (device.status === 'active' ? 'online' : 'offline');
+                const statusLabel = device.sleep_mode ? 'Sleeping' : (device.status === 'active' ? 'Online' : 'Offline');
+                const lastSeen = device.last_updated ? new Date(device.last_updated).toLocaleString() : 'Never';
+                
+                return `
+                    <tr>
+                        <td><strong>${device.bin_id}</strong></td>
+                        <td><span class="status-dot ${status}"></span>${statusLabel}</td>
+                        <td>${Math.round(device.current_fill_level || 0)}%</td>
+                        <td>${Math.round(device.battery_level || 0)}%</td>
+                        <td>${lastSeen}</td>
+                        <td>
+                            <button onclick="viewDeviceDetails('${device.bin_id}')" 
+                                    style="background: #0088ff; border: none; color: #fff; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">
+                                <i class="fas fa-eye"></i> Details
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function getStatusClass(value, goodThreshold, warningThreshold) {
+            if (value >= goodThreshold) return 'status-good';
+            if (value >= warningThreshold) return 'status-warning';
+            return 'status-critical';
+        }
+
+        function viewDeviceDetails(binId) {
+            // Redirect to main dashboard with bin selected
+            window.location.href = `/?bin=${binId}`;
+        }
+    </script>
+</body>
+</html>

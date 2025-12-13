@@ -423,6 +423,126 @@
             border: 1px solid #666;
             color: #888;
         }
+        
+        /* Bin Detail Modal */
+        .bin-detail-modal {
+            max-width: 700px;
+            width: 95%;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .modal-close:hover {
+            color: #ff0055;
+        }
+        
+        .bin-detail-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+            padding-bottom: 10px;
+        }
+        
+        .tab-btn {
+            background: rgba(100, 100, 100, 0.1);
+            border: 1px solid rgba(100, 100, 100, 0.3);
+            color: #888;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-btn:hover {
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+        
+        .tab-btn.active {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: #00ff88;
+            color: #00ff88;
+        }
+        
+        .bin-detail-content {
+            min-height: 200px;
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .detail-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 3px solid #00ff88;
+        }
+        
+        .detail-label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .detail-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.1rem;
+            color: #00ff88;
+            margin-top: 5px;
+        }
+        
+        .detail-value.warning { color: #ffaa00; }
+        .detail-value.critical { color: #ff0055; }
+        
+        .heartbeat-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .heartbeat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid rgba(100, 100, 100, 0.2);
+        }
+        
+        .heartbeat-time {
+            color: #888;
+            font-size: 0.9rem;
+        }
+        
+        .heartbeat-rssi {
+            font-family: 'Orbitron', monospace;
+            color: #00ff88;
+        }
+        
+        .bin-item {
+            cursor: pointer;
+        }
+        
+        .bin-item:hover {
+            background: rgba(0, 255, 136, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -432,11 +552,11 @@
             <i class="fas fa-recycle"></i>
             <span class="logo-text">CLEAN<span class="highlight">ROUTE</span></span>
         </div>
-        <div class="stats-bar">
-            <a href="/" class="back-btn">
-                <i class="fas fa-map"></i> Back to Map
-            </a>
-        </div>
+        <nav class="nav-links">
+            <a href="/" class="nav-link"><i class="fas fa-map"></i> Map</a>
+            <a href="/districts" class="nav-link active"><i class="fas fa-city"></i> Districts</a>
+            <a href="/iot" class="nav-link"><i class="fas fa-microchip"></i> IoT Dashboard</a>
+        </nav>
     </header>
 
     <!-- Login Modal -->
@@ -458,6 +578,28 @@
                     <button type="submit" class="modal-btn primary">Login</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Bin Detail Modal -->
+    <div class="modal" id="binDetailModal">
+        <div class="modal-content bin-detail-modal">
+            <div class="modal-header">
+                <h2 class="modal-title"><i class="fas fa-microchip"></i> <span id="binModalTitle">Bin Details</span></h2>
+                <button class="modal-close" onclick="closeBinModal()">&times;</button>
+            </div>
+            <div class="bin-detail-tabs">
+                <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
+                <button class="tab-btn" onclick="switchTab('heartbeat')">Heartbeat</button>
+                <button class="tab-btn" onclick="switchTab('power')">Power</button>
+                <button class="tab-btn" onclick="switchTab('diagnostics')">Diagnostics</button>
+            </div>
+            <div class="bin-detail-content" id="binDetailContent">
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    Loading...
+                </div>
+            </div>
         </div>
     </div>
 
@@ -698,13 +840,13 @@
                             const itemClass = fill >= 90 ? 'critical' : fill >= 70 ? 'warning' : '';
                             
                             binsHtml += `
-                                <div class="bin-item ${itemClass}">
+                                <div class="bin-item ${itemClass}" onclick="showBinDetails('${bin.bin_id}')">
                                     <div class="bin-info">
                                         <div class="bin-id">${bin.bin_id}</div>
                                     </div>
                                     <div class="bin-stats">
                                         <div class="fill-level ${fillClass}">${Math.round(fill)}%</div>
-                                        ${isAdmin ? `<button class="delete-btn" onclick="deleteBin('${bin.bin_id}')"><i class="fas fa-trash"></i></button>` : ''}
+                                        ${isAdmin ? `<button class="delete-btn" onclick="event.stopPropagation(); deleteBin('${bin.bin_id}')"><i class="fas fa-trash"></i></button>` : ''}
                                     </div>
                                 </div>
                             `;
@@ -751,6 +893,221 @@
                 document.getElementById('districtsGrid').innerHTML = 
                     '<div class="no-bins">Error loading data. Is the backend running?</div>';
             }
+        }
+        
+        // Bin Detail Modal Functions
+        let currentBinId = null;
+        let currentTab = 'overview';
+        let binData = {};
+        
+        async function showBinDetails(binId) {
+            currentBinId = binId;
+            currentTab = 'overview';
+            document.getElementById('binModalTitle').textContent = `Device: ${binId}`;
+            document.getElementById('binDetailModal').classList.add('active');
+            
+            // Reset tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector('.tab-btn').classList.add('active');
+            
+            await loadBinData(binId);
+            renderTabContent();
+        }
+        
+        function closeBinModal() {
+            document.getElementById('binDetailModal').classList.remove('active');
+            currentBinId = null;
+            binData = {};
+        }
+        
+        async function loadBinData(binId) {
+            const content = document.getElementById('binDetailContent');
+            content.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+            
+            try {
+                // Fetch all IoT data in parallel
+                const [heartbeats, power, shadow, diagnostics] = await Promise.all([
+                    fetch(`/api/iot/device/${binId}/heartbeats`).then(r => r.json()).catch(() => []),
+                    fetch(`/api/iot/device/${binId}/power`).then(r => r.json()).catch(() => null),
+                    fetch(`/api/iot/device/${binId}/shadow`).then(r => r.json()).catch(() => null),
+                    fetch(`/api/iot/device/${binId}/diagnostics`).then(r => r.json()).catch(() => [])
+                ]);
+                
+                binData = { heartbeats, power, shadow, diagnostics };
+                renderTabContent();
+            } catch (error) {
+                console.error('Error loading bin data:', error);
+                content.innerHTML = '<div class="no-bins">Error loading IoT data</div>';
+            }
+        }
+        
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase() === tab);
+            });
+            renderTabContent();
+        }
+        
+        function renderTabContent() {
+            const content = document.getElementById('binDetailContent');
+            
+            switch (currentTab) {
+                case 'overview':
+                    renderOverviewTab(content);
+                    break;
+                case 'heartbeat':
+                    renderHeartbeatTab(content);
+                    break;
+                case 'power':
+                    renderPowerTab(content);
+                    break;
+                case 'diagnostics':
+                    renderDiagnosticsTab(content);
+                    break;
+            }
+        }
+        
+        function renderOverviewTab(content) {
+            const shadow = binData.shadow || {};
+            const power = binData.power || {};
+            const lastHeartbeat = binData.heartbeats?.[0] || {};
+            
+            content.innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Device ID</div>
+                        <div class="detail-value">${currentBinId}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value ${shadow.sleep_mode ? 'warning' : ''}">${shadow.sleep_mode ? 'Sleeping' : 'Active'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Firmware</div>
+                        <div class="detail-value">${shadow.firmware_version || 'Unknown'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">RSSI</div>
+                        <div class="detail-value">${lastHeartbeat.rssi_dbm || '--'} dBm</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Battery Voltage</div>
+                        <div class="detail-value ${power.battery_voltage < 3.5 ? 'critical' : ''}">${power.battery_voltage || '--'}V</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Solar Power</div>
+                        <div class="detail-value">${power.solar_voltage || '--'}V</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Heartbeats (24h)</div>
+                        <div class="detail-value">${binData.heartbeats?.length || 0}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Last Seen</div>
+                        <div class="detail-value">${lastHeartbeat.timestamp ? new Date(lastHeartbeat.timestamp).toLocaleString() : 'Never'}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderHeartbeatTab(content) {
+            const heartbeats = binData.heartbeats || [];
+            
+            if (heartbeats.length === 0) {
+                content.innerHTML = '<div class="no-bins">No heartbeat data available</div>';
+                return;
+            }
+            
+            content.innerHTML = `
+                <div class="heartbeat-list">
+                    ${heartbeats.map(hb => `
+                        <div class="heartbeat-item">
+                            <span class="heartbeat-time">${new Date(hb.timestamp).toLocaleString()}</span>
+                            <span class="heartbeat-rssi">${hb.rssi_dbm} dBm</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        function renderPowerTab(content) {
+            const power = binData.power;
+            
+            if (!power) {
+                content.innerHTML = '<div class="no-bins">No power profile data available</div>';
+                return;
+            }
+            
+            const batteryClass = power.battery_voltage < 3.3 ? 'critical' : power.battery_voltage < 3.5 ? 'warning' : '';
+            
+            content.innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Battery Voltage</div>
+                        <div class="detail-value ${batteryClass}">${power.battery_voltage}V</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Solar Voltage</div>
+                        <div class="detail-value">${power.solar_voltage || 0}V</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Current Draw</div>
+                        <div class="detail-value">${power.current_draw_ma || 0} mA</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Power Mode</div>
+                        <div class="detail-value">${power.power_mode || 'normal'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Sleep Interval</div>
+                        <div class="detail-value">${power.sleep_interval_s || 300}s</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Last Update</div>
+                        <div class="detail-value">${power.timestamp ? new Date(power.timestamp).toLocaleString() : 'Unknown'}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderDiagnosticsTab(content) {
+            const diagnostics = binData.diagnostics || [];
+            
+            if (diagnostics.length === 0) {
+                content.innerHTML = '<div class="no-bins">No diagnostic reports available</div>';
+                return;
+            }
+            
+            const latest = diagnostics[0];
+            content.innerHTML = `
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Uptime</div>
+                        <div class="detail-value">${Math.round((latest.uptime_seconds || 0) / 3600)}h</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Free Memory</div>
+                        <div class="detail-value">${latest.free_memory_bytes ? Math.round(latest.free_memory_bytes / 1024) + ' KB' : '--'}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">CPU Temp</div>
+                        <div class="detail-value">${latest.cpu_temp_c || '--'}C</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Error Count</div>
+                        <div class="detail-value ${latest.error_count > 0 ? 'critical' : ''}">${latest.error_count || 0}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Restart Count</div>
+                        <div class="detail-value">${latest.restart_count || 0}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Last Error</div>
+                        <div class="detail-value">${latest.last_error || 'None'}</div>
+                    </div>
+                </div>
+            `;
         }
         
         // Initialize
