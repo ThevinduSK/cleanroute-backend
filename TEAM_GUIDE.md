@@ -8,6 +8,22 @@ CleanRoute is a smart waste bin monitoring system that helps municipal councils 
 2. **Backend (Person 2)** - Python/FastAPI server that processes data
 3. **UI/ML (Person 3)** - Web dashboard and predictive analytics
 
+## ✨ **NEW: ML Prediction & Route Optimization IMPLEMENTED!**
+
+✅ **EWMA-based fill prediction** - Predict future bin fill levels
+✅ **Greedy nearest-neighbor routing** - Generate optimal collection routes
+✅ **RESTful API endpoints** - Ready for frontend integration
+✅ **Configurable thresholds** - Adjust for different scenarios
+
+📚 **Quick Start:** See `ML_ROUTING_QUICKREF.md` for API usage
+📖 **Full Guide:** See `ML_ROUTING_GUIDE.md` for implementation details
+🧪 **Testing:** Run `python backend/test_ml_routing.py`
+
+**New API Endpoints:**
+- `GET /bins/forecast` - Predict all bins at future time
+- `GET /bins/{id}/prediction` - Predict single bin
+- `POST /routes/optimize` - Generate optimal route ⭐
+
 ---
 
 ## 📊 System Architecture

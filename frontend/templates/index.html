@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CleanRoute - Smart Waste Management</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <i class="fas fa-recycle"></i>
+            <span class="logo-text">CLEAN<span class="highlight">ROUTE</span></span>
+        </div>
+        <div class="stats-bar">
+            <div class="stat-item">
+                <i class="fas fa-trash-alt"></i>
+                <div class="stat-content">
+                    <div class="stat-value" id="totalBins">--</div>
+                    <div class="stat-label">Total Bins</div>
+                </div>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-check-circle"></i>
+                <div class="stat-content">
+                    <div class="stat-value" id="activeBins">--</div>
+                    <div class="stat-label">Active</div>
+                </div>
+            </div>
+            <div class="stat-item warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div class="stat-content">
+                    <div class="stat-value" id="warningBins">--</div>
+                    <div class="stat-label">Warning</div>
+                </div>
+            </div>
+            <div class="stat-item danger">
+                <i class="fas fa-exclamation-circle"></i>
+                <div class="stat-content">
+                    <div class="stat-value" id="fullBins">--</div>
+                    <div class="stat-label">Critical</div>
+                </div>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-chart-pie"></i>
+                <div class="stat-content">
+                    <div class="stat-value" id="avgFill">--</div>
+                    <div class="stat-label">Avg Fill</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="control-panel">
+                <h2 class="panel-title">
+                    <i class="fas fa-robot"></i> ML Prediction
+                </h2>
+                
+                <div class="control-section">
+                    <label class="control-label">
+                        <i class="far fa-calendar-alt"></i> Prediction Date
+                    </label>
+                    <input type="date" id="predictionDate" class="control-input">
+                </div>
+                
+                <div class="control-section">
+                    <label class="control-label">
+                        <i class="far fa-clock"></i> Prediction Time
+                    </label>
+                    <input type="time" id="predictionTime" class="control-input" value="14:00">
+                </div>
+                
+                <button class="btn btn-primary" onclick="runPrediction()">
+                    <i class="fas fa-brain"></i> Generate Predictions
+                </button>
+                
+                <button class="btn btn-success" onclick="optimizeRoute()">
+                    <i class="fas fa-route"></i> Optimize Route
+                </button>
+                
+                <button class="btn btn-secondary" onclick="resetView()">
+                    <i class="fas fa-sync-alt"></i> Reset View
+                </button>
+            </div>
+
+            <!-- Route Info -->
+            <div class="route-info" id="routeInfo" style="display: none;">
+                <h3 class="route-title">
+                    <i class="fas fa-truck"></i> Route Details
+                </h3>
+                <div class="route-stats">
+                    <div class="route-stat">
+                        <span class="route-stat-label">Bins to Collect:</span>
+                        <span class="route-stat-value" id="routeBinsCount">0</span>
+                    </div>
+                    <div class="route-stat">
+                        <span class="route-stat-label">Total Distance:</span>
+                        <span class="route-stat-value" id="routeDistance">0 km</span>
+                    </div>
+                    <div class="route-stat">
+                        <span class="route-stat-label">Est. Time:</span>
+                        <span class="route-stat-value" id="routeTime">0 hrs</span>
+                    </div>
+                </div>
+                <div class="route-waypoints" id="routeWaypoints"></div>
+            </div>
+
+            <!-- Legend -->
+            <div class="legend">
+                <h3 class="legend-title">
+                    <i class="fas fa-info-circle"></i> Legend
+                </h3>
+                <div class="legend-item">
+                    <span class="legend-marker" style="background: #00ff88;"></span>
+                    <span class="legend-label">Normal (&lt;70%)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-marker" style="background: #ffaa00;"></span>
+                    <span class="legend-label">Warning (70-90%)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-marker" style="background: #ff0055;"></span>
+                    <span class="legend-label">Critical (&gt;90%)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-marker" style="background: #666;"></span>
+                    <span class="legend-label">Offline</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Map Container -->
+        <main class="map-container">
+            <div id="map"></div>
+            
+            <!-- Loading Overlay -->
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="loading-spinner">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <p>Processing...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Bin Detail Modal -->
+    <div class="modal" id="binModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTitle">Bin Details</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 FastAPI routes for CleanRoute Backend.
 Exposes endpoints for the Planner UI.
 """
-from typing import Optional, List
+from typing import Optional, List, Dict
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
@@ -111,20 +111,187 @@ async def get_recent_telemetry(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Future Endpoints (Phase 3 - EWMA Forecasting)
+# ML Prediction & Route Optimization Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+@router.get("/bins/forecast")
+async def forecast_bins(
+    target_time: Optional[str] = Query(None, description="ISO datetime or preset: tomorrow_morning, tomorrow_afternoon, 6h, 24h, 48h"),
+    threshold: float = Query(80.0, ge=0, le=100, description="Fill percentage threshold for collection")
+):
+    """
+    Predict fill levels for all bins at a specific future time.
+    
+    Args:
+        target_time: Future time (ISO format or preset)
+        threshold: Minimum fill % to mark as needing collection
+    
+    Returns:
+        Predictions for all bins
+    """
+    from . import ml_prediction
+    from dateutil import parser as date_parser
+    
+    try:
+        # Parse target time
+        if target_time is None:
+            # Default to tomorrow afternoon
+            target_dt = ml_prediction.parse_preset_time('tomorrow_afternoon')
+        elif target_time in ['tomorrow_morning', 'tomorrow_afternoon', '6h', '24h', '48h']:
+            target_dt = ml_prediction.parse_preset_time(target_time)
+        else:
+            target_dt = date_parser.parse(target_time)
+        
+        # Get predictions
+        result = ml_prediction.forecast_all_bins(target_dt, threshold)
+        
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return result
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid time format: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/bins/{bin_id}/prediction")
+async def get_bin_prediction(
+    bin_id: str,
+    target_time: Optional[str] = Query(None, description="ISO datetime or preset")
+):
+    """
+    Get detailed prediction for a specific bin.
+    
+    Args:
+        bin_id: Bin identifier
+        target_time: Future time to predict
+    
+    Returns:
+        Detailed prediction with fill rate, confidence, etc.
+    """
+    from . import ml_prediction
+    from dateutil import parser as date_parser
+    
+    try:
+        # Parse target time
+        if target_time is None:
+            target_dt = ml_prediction.parse_preset_time('tomorrow_afternoon')
+        elif target_time in ['tomorrow_morning', 'tomorrow_afternoon', '6h', '24h', '48h']:
+            target_dt = ml_prediction.parse_preset_time(target_time)
+        else:
+            target_dt = date_parser.parse(target_time)
+        
+        # Get prediction
+        prediction = ml_prediction.predict_fill_at_time(bin_id, target_dt)
+        
+        if "error" in prediction:
+            raise HTTPException(status_code=404, detail=prediction["error"])
+        
+        return prediction
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid time format: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RouteOptimizationRequest(BaseModel):
+    """Request body for route optimization."""
+    target_time: Optional[str] = None  # ISO datetime or preset
+    threshold_pct: float = 80.0
+    depot_location: Optional[Dict[str, float]] = None  # {"lat": 6.9271, "lon": 79.8612, "name": "Office"}
+    algorithm: str = "greedy"
+
+
+@router.post("/routes/optimize")
+async def optimize_route(request: RouteOptimizationRequest):
+    """
+    Generate optimal collection route based on predicted fill levels.
+    
+    Workflow:
+    1. Predict fill levels at target time
+    2. Filter bins that need collection (>= threshold)
+    3. Optimize route using selected algorithm
+    4. Return route with waypoints, distance, duration
+    
+    Args:
+        request: Route optimization parameters
+    
+    Returns:
+        Optimized route with waypoints and summary
+    """
+    from . import ml_prediction, route_optimizer
+    from dateutil import parser as date_parser
+    
+    try:
+        # Parse target time
+        if request.target_time is None:
+            target_dt = ml_prediction.parse_preset_time('tomorrow_afternoon')
+        elif request.target_time in ['tomorrow_morning', 'tomorrow_afternoon', '6h', '24h', '48h']:
+            target_dt = ml_prediction.parse_preset_time(request.target_time)
+        else:
+            target_dt = date_parser.parse(request.target_time)
+        
+        # Get bins that need collection
+        bins_to_collect = ml_prediction.get_bins_needing_collection(
+            target_dt, 
+            request.threshold_pct
+        )
+        
+        if not bins_to_collect:
+            return {
+                "message": "No bins need collection at the specified time and threshold",
+                "target_time": target_dt.isoformat(),
+                "threshold_pct": request.threshold_pct,
+                "route": None
+            }
+        
+        # Optimize route
+        route_result = route_optimizer.optimize_route(
+            bins_to_collect,
+            request.depot_location,
+            request.algorithm
+        )
+        
+        # Add metadata
+        route_result['target_time'] = target_dt.isoformat()
+        route_result['threshold_pct'] = request.threshold_pct
+        route_result['generated_at'] = datetime.utcnow().isoformat()
+        
+        return route_result
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid parameters: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/bins/at_risk")
-async def get_bins_at_risk():
+async def get_bins_at_risk(
+    threshold_hours: int = Query(48, ge=1, le=168, description="Hours until overflow threshold")
+):
     """
-    Get bins at risk of overflow.
-    TODO: Implement EWMA-based TTF prediction.
+    Get bins at risk of overflow (legacy endpoint - use /bins/forecast instead).
+    
+    This endpoint is kept for backward compatibility.
     """
-    # Placeholder for Phase 3
-    return {
-        "message": "Coming soon - EWMA overflow prediction",
-        "bins_at_risk": []
-    }
+    from . import ml_prediction
+    from datetime import timedelta
+    
+    try:
+        target_time = datetime.utcnow() + timedelta(hours=threshold_hours)
+        bins = ml_prediction.get_bins_needing_collection(target_time, 80.0)
+        
+        return {
+            "threshold_hours": threshold_hours,
+            "target_time": target_time.isoformat(),
+            "bins_at_risk": bins,
+            "count": len(bins)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
