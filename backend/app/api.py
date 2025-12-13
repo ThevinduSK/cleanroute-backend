@@ -35,6 +35,7 @@ class BinLatest(BaseModel):
     batt_v: Optional[float] = None
     temp_c: Optional[float] = None
     last_telemetry_ts: Optional[datetime] = None
+    sleep_mode: Optional[bool] = True  # True = sleeping/offline, False = awake
 
 
 class TelemetryRecord(BaseModel):
@@ -545,7 +546,7 @@ async def send_reminders():
                 bin_id=bin_data['bin_id'],
                 alert_type="collection_reminder",
                 severity="warning",
-                message=f"⚠️ Reminder: Please turn on bin device {bin_data['bin_id']}. User: {bin_data['user_name']}"
+                message=f"Reminder: Please turn on bin device {bin_data['bin_id']}. User: {bin_data['user_name']}"
             )
             reminders_sent.append({
                 "bin_id": bin_data['bin_id'],
@@ -806,3 +807,642 @@ async def setup_admin(password: str = Query(..., description="Admin password to 
         }
     else:
         raise HTTPException(status_code=500, detail="Failed to create admin user")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Collection Day Workflow - Zone Based (Admin Protected)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ZoneCollectionRequest(BaseModel):
+    zone_id: str
+    zone_name: Optional[str] = None
+
+
+@router.post("/admin/collection/start")
+async def start_zone_collection(request: ZoneCollectionRequest, username: str = Depends(verify_admin)):
+    """
+    Start collection for a specific zone.
+    
+    Workflow Step 1: Wake up all devices in the zone.
+    The bins will wake up and start sending their current status.
+    
+    Args:
+        request: Zone ID and name
+        username: Admin user (from auth)
+    
+    Returns:
+        Collection session info with number of bins awakened
+    """
+    from . import mqtt_commands
+    
+    try:
+        # Check if there's already an active session for this zone
+        existing = db.get_active_collection_session(request.zone_id)
+        if existing:
+            return {
+                "success": False,
+                "message": f"Collection already in progress for this zone (session {existing['id']})",
+                "session": dict(existing)
+            }
+        
+        # Wake up all bins in the zone
+        result = mqtt_commands.wake_up_zone(request.zone_id, request.zone_name)
+        
+        if not result.get('success') and result.get('total_bins', 0) == 0:
+            raise HTTPException(status_code=404, detail="No bins found in this zone")
+        
+        # Create collection session
+        session_id = db.start_collection_session(
+            zone_id=request.zone_id,
+            zone_name=request.zone_name,
+            bins_total=result.get('total_bins', 0),
+            admin_user=username
+        )
+        
+        return {
+            "success": True,
+            "message": f"Collection started for {request.zone_name or request.zone_id}",
+            "session_id": session_id,
+            "zone_id": request.zone_id,
+            "zone_name": request.zone_name,
+            "bins_awakened": result.get('bins_awakened', 0),
+            "bins_total": result.get('total_bins', 0),
+            "bins_failed": result.get('bins_failed', []),
+            "started_at": result.get('started_at'),
+            "status": "started",
+            "next_step": "Wait for bins to respond, then use 'Check Status'"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/collection/check")
+async def check_zone_collection(request: ZoneCollectionRequest, username: str = Depends(verify_admin)):
+    """
+    Check collection status for a zone.
+    
+    Workflow Step 2: Request status from all bins and check which have responded.
+    Use this to see how many bins are awake and ready.
+    
+    Returns:
+        Status of all bins in the zone including which have responded
+    """
+    from . import mqtt_commands
+    
+    try:
+        # Request status from all bins
+        result = mqtt_commands.request_zone_status(request.zone_id, request.zone_name)
+        
+        # Get detailed bin status
+        bins_status = db.get_zone_bins_status(request.zone_id)
+        
+        # Update session if exists
+        session = db.get_active_collection_session(request.zone_id)
+        if session:
+            db.update_collection_session_status(
+                session['id'], 
+                'checked',
+                bins_responded=bins_status['responded']
+            )
+        
+        return {
+            "success": True,
+            "message": f"Status check for {request.zone_name or request.zone_id}",
+            "zone_id": request.zone_id,
+            "zone_name": request.zone_name,
+            "session_id": session['id'] if session else None,
+            "status": "checked",
+            "bins_total": bins_status['total'],
+            "bins_responded": bins_status['responded'],
+            "bins_pending": bins_status['pending'],
+            "bins": bins_status['bins'],
+            "checked_at": result.get('requested_at'),
+            "next_step": "After collection is done, click 'Finish' to verify all bins"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/collection/finish")
+async def finish_zone_collection(request: ZoneCollectionRequest, username: str = Depends(verify_admin)):
+    """
+    Finish collection for a zone (pre-end check).
+    
+    Workflow Step 3: Request final status from all bins.
+    This allows checking if any bins were missed before ending the collection.
+    
+    Returns:
+        Final status showing which bins were collected
+    """
+    from . import mqtt_commands
+    
+    try:
+        # Request final status from all bins
+        result = mqtt_commands.request_zone_status(request.zone_id, request.zone_name)
+        
+        # Get detailed bin status
+        bins_status = db.get_zone_bins_status(request.zone_id)
+        
+        # Check for bins that might have been missed (still high fill level)
+        missed_bins = [
+            b for b in bins_status['bins'] 
+            if b.get('fill_pct') and b['fill_pct'] > 70 and b.get('responded')
+        ]
+        
+        # Update session
+        session = db.get_active_collection_session(request.zone_id)
+        if session:
+            db.update_collection_session_status(
+                session['id'],
+                'finished',
+                bins_responded=bins_status['responded'],
+                bins_collected=bins_status['responded'] - len(missed_bins)
+            )
+        
+        return {
+            "success": True,
+            "message": f"Collection finish check for {request.zone_name or request.zone_id}",
+            "zone_id": request.zone_id,
+            "zone_name": request.zone_name,
+            "session_id": session['id'] if session else None,
+            "status": "finished",
+            "bins_total": bins_status['total'],
+            "bins_responded": bins_status['responded'],
+            "bins_potentially_missed": len(missed_bins),
+            "missed_bins": missed_bins,
+            "bins": bins_status['bins'],
+            "finished_at": datetime.utcnow().isoformat(),
+            "next_step": "If all bins collected, click 'End Collection' to put devices to sleep"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/collection/end")
+async def end_zone_collection(request: ZoneCollectionRequest, username: str = Depends(verify_admin)):
+    """
+    End collection for a zone.
+    
+    Workflow Step 4: Put all devices to sleep to save power.
+    This is the final step after collection is complete.
+    
+    Returns:
+        Summary of the collection session
+    """
+    from . import mqtt_commands
+    
+    try:
+        # Get session info before ending
+        session = db.get_active_collection_session(request.zone_id)
+        
+        # Put all bins to sleep
+        result = mqtt_commands.sleep_zone(request.zone_id, request.zone_name)
+        
+        # Update session status
+        if session:
+            db.update_collection_session_status(session['id'], 'ended')
+        
+        return {
+            "success": True,
+            "message": f"Collection ended for {request.zone_name or request.zone_id}",
+            "zone_id": request.zone_id,
+            "zone_name": request.zone_name,
+            "session_id": session['id'] if session else None,
+            "status": "ended",
+            "bins_asleep": result.get('bins_asleep', 0),
+            "bins_total": result.get('total_bins', 0),
+            "ended_at": result.get('ended_at'),
+            "summary": {
+                "started_at": session['started_at'].isoformat() if session and session.get('started_at') else None,
+                "ended_at": datetime.utcnow().isoformat(),
+                "bins_total": session['bins_total'] if session else result.get('total_bins', 0),
+                "bins_collected": session['bins_collected'] if session else 0
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/admin/collection/status/{zone_id}")
+async def get_zone_collection_status(zone_id: str, username: str = Depends(verify_admin)):
+    """
+    Get current collection status for a zone.
+    
+    Returns:
+        Current session info and bin status
+    """
+    try:
+        session = db.get_active_collection_session(zone_id)
+        bins_status = db.get_zone_bins_status(zone_id)
+        
+        return {
+            "zone_id": zone_id,
+            "has_active_session": session is not None,
+            "session": dict(session) if session else None,
+            "bins_status": bins_status
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IoT Device Management Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DeviceProvisionRequest(BaseModel):
+    bin_id: str
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    zone_id: Optional[str] = None
+
+
+class FirmwareVersionRequest(BaseModel):
+    version: str
+    file_url: Optional[str] = None
+    file_size_kb: Optional[int] = None
+    checksum: Optional[str] = None
+    changelog: Optional[str] = None
+    is_stable: bool = False
+
+
+class FirmwareUpdateRequest(BaseModel):
+    bin_id: str
+    version: str
+
+
+class BulkFirmwareUpdateRequest(BaseModel):
+    zone_id: str
+    version: str
+
+
+class DiagnosticRequest(BaseModel):
+    bin_id: str
+    diagnostic_type: str = "full"
+
+
+class ShadowUpdateRequest(BaseModel):
+    bin_id: str
+    desired_state: Dict
+
+
+@router.post("/iot/provision")
+async def provision_device(request: DeviceProvisionRequest, username: str = Depends(verify_admin)):
+    """
+    Provision a new IoT device with auto-generated MQTT credentials.
+    
+    Creates:
+    - MQTT username/password for the device
+    - Bin record in database
+    - Device shadow entry
+    """
+    import secrets
+    import subprocess
+    import os
+    
+    try:
+        # Generate secure password
+        password = f"{request.bin_id.lower()}_{secrets.token_hex(8)}"
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        
+        # Create bin record
+        if request.lat and request.lon:
+            db.upsert_bin(request.bin_id, request.lat, request.lon, datetime.utcnow().isoformat())
+        
+        # Store provisioning info
+        db.provision_device(request.bin_id, request.bin_id, password_hash, username)
+        
+        # Initialize device shadow
+        db.update_device_shadow_reported(request.bin_id, {
+            "provisioned": True,
+            "provisioned_at": datetime.utcnow().isoformat()
+        })
+        
+        # Add to Mosquitto passwd file
+        passwd_file = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "mqtt", "passwd"
+        )
+        
+        try:
+            subprocess.run(
+                ["mosquitto_passwd", "-b", passwd_file, request.bin_id, password],
+                check=True,
+                capture_output=True
+            )
+            mqtt_added = True
+        except subprocess.CalledProcessError:
+            mqtt_added = False
+        except FileNotFoundError:
+            mqtt_added = False
+        
+        return {
+            "success": True,
+            "bin_id": request.bin_id,
+            "mqtt_username": request.bin_id,
+            "mqtt_password": password,  # Only shown once!
+            "mqtt_added": mqtt_added,
+            "provisioned_by": username,
+            "provisioned_at": datetime.utcnow().isoformat(),
+            "note": "Save the password! It won't be shown again."
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/iot/device/{bin_id}")
+async def revoke_device(bin_id: str, username: str = Depends(verify_admin)):
+    """Revoke device credentials and mark as decommissioned."""
+    try:
+        db.revoke_device_credentials(bin_id)
+        
+        # Update device shadow
+        db.update_device_shadow_desired(bin_id, {"revoked": True})
+        
+        return {
+            "success": True,
+            "bin_id": bin_id,
+            "revoked": True,
+            "revoked_by": username,
+            "revoked_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/iot/device/{bin_id}/shadow")
+async def get_device_shadow(bin_id: str):
+    """Get device shadow (last known state and desired state)."""
+    try:
+        shadow = db.get_device_shadow(bin_id)
+        if not shadow:
+            raise HTTPException(status_code=404, detail="Device shadow not found")
+        
+        delta = db.get_device_shadow_delta(bin_id)
+        
+        return {
+            "bin_id": bin_id,
+            "shadow": shadow,
+            "delta": delta
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iot/device/{bin_id}/shadow")
+async def update_device_shadow(bin_id: str, request: ShadowUpdateRequest, username: str = Depends(verify_admin)):
+    """Update desired state of device shadow."""
+    from . import mqtt_commands
+    
+    try:
+        result = mqtt_commands.update_device_shadow_desired(bin_id, request.desired_state)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/iot/device/{bin_id}/heartbeats")
+async def get_device_heartbeats(bin_id: str, limit: int = Query(50, le=200)):
+    """Get heartbeat history for a device."""
+    try:
+        heartbeats = db.get_device_heartbeat_history(bin_id, limit)
+        return {
+            "bin_id": bin_id,
+            "heartbeats": [dict(h) for h in heartbeats],
+            "count": len(heartbeats)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/iot/device/{bin_id}/power")
+async def get_device_power_profile(bin_id: str, days: int = Query(30, le=365)):
+    """Get power/battery profile for a device."""
+    try:
+        profile = db.get_power_profile(bin_id, days)
+        return profile
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iot/device/{bin_id}/diagnostic")
+async def request_device_diagnostic(bin_id: str, request: DiagnosticRequest, username: str = Depends(verify_admin)):
+    """Request diagnostic information from a device."""
+    from . import mqtt_commands
+    
+    try:
+        result = mqtt_commands.request_diagnostic(bin_id, request.diagnostic_type)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/iot/device/{bin_id}/diagnostics")
+async def get_device_diagnostics(bin_id: str, limit: int = Query(10, le=50)):
+    """Get diagnostic history for a device."""
+    try:
+        diagnostics = db.get_device_diagnostics(bin_id, limit)
+        return {
+            "bin_id": bin_id,
+            "diagnostics": diagnostics,
+            "count": len(diagnostics)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Firmware Management Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/iot/firmware/version")
+async def create_firmware_version(request: FirmwareVersionRequest, username: str = Depends(verify_admin)):
+    """Register a new firmware version."""
+    try:
+        version_id = db.create_firmware_version(
+            version=request.version,
+            file_url=request.file_url,
+            file_size_kb=request.file_size_kb,
+            checksum=request.checksum,
+            changelog=request.changelog,
+            is_stable=request.is_stable
+        )
+        
+        return {
+            "success": True,
+            "version": request.version,
+            "version_id": version_id,
+            "is_stable": request.is_stable
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/iot/firmware/latest")
+async def get_latest_firmware(stable_only: bool = Query(True)):
+    """Get the latest available firmware version."""
+    try:
+        firmware = db.get_latest_firmware(stable_only)
+        if not firmware:
+            return {"message": "No firmware versions found", "firmware": None}
+        return {"firmware": firmware}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iot/firmware/update")
+async def initiate_firmware_update(request: FirmwareUpdateRequest, username: str = Depends(verify_admin)):
+    """Initiate firmware update for a single device."""
+    from . import mqtt_commands
+    
+    try:
+        # Get firmware info
+        firmware = db.get_latest_firmware(stable_only=False)
+        if not firmware:
+            raise HTTPException(status_code=404, detail="Firmware version not found")
+        
+        result = mqtt_commands.send_firmware_update(
+            bin_id=request.bin_id,
+            version=request.version,
+            file_url=firmware.get('file_url', ''),
+            checksum=firmware.get('checksum', ''),
+            file_size_kb=firmware.get('file_size_kb', 0)
+        )
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iot/firmware/update/bulk")
+async def initiate_bulk_firmware_update(request: BulkFirmwareUpdateRequest, username: str = Depends(verify_admin)):
+    """Initiate firmware update for all devices in a zone."""
+    from . import mqtt_commands
+    
+    try:
+        # Get firmware info
+        firmware = db.get_latest_firmware(stable_only=False)
+        if not firmware:
+            raise HTTPException(status_code=404, detail="Firmware version not found")
+        
+        result = mqtt_commands.send_bulk_firmware_update(
+            zone_id=request.zone_id,
+            version=request.version,
+            file_url=firmware.get('file_url', ''),
+            checksum=firmware.get('checksum', ''),
+            file_size_kb=firmware.get('file_size_kb', 0)
+        )
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/iot/firmware/updates/pending")
+async def get_pending_firmware_updates(zone_prefix: Optional[str] = None):
+    """Get list of pending firmware updates."""
+    try:
+        updates = db.get_pending_firmware_updates(zone_prefix)
+        return {
+            "pending_updates": [dict(u) for u in updates],
+            "count": len(updates)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Command Management Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/iot/commands/pending")
+async def get_pending_commands(bin_id: Optional[str] = None):
+    """Get commands pending acknowledgment."""
+    try:
+        commands = db.get_pending_commands(bin_id)
+        return {
+            "pending_commands": [dict(c) for c in commands],
+            "count": len(commands)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iot/commands/retry")
+async def retry_pending_commands(max_age_seconds: int = Query(60), username: str = Depends(verify_admin)):
+    """Retry commands that haven't been acknowledged."""
+    from . import mqtt_commands
+    
+    try:
+        result = mqtt_commands.retry_pending_commands(max_age_seconds)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iot/heartbeat/check")
+async def check_device_heartbeats(timeout_minutes: int = Query(5), username: str = Depends(verify_admin)):
+    """Check for devices missing heartbeats and mark them offline."""
+    from . import mqtt_commands
+    
+    try:
+        result = mqtt_commands.check_device_heartbeats(timeout_minutes)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iot/device/{bin_id}/heartbeat")
+async def request_device_heartbeat(bin_id: str, username: str = Depends(verify_admin)):
+    """Request a heartbeat from a specific device."""
+    from . import mqtt_commands
+    
+    try:
+        success = mqtt_commands.request_heartbeat(bin_id)
+        return {
+            "success": success,
+            "bin_id": bin_id,
+            "requested_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IoT Tables Initialization
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/iot/init-tables")
+async def initialize_iot_tables(username: str = Depends(verify_admin)):
+    """Initialize all IoT-related database tables."""
+    try:
+        db.init_all_iot_tables()
+        return {
+            "success": True,
+            "message": "All IoT tables initialized",
+            "tables": [
+                "device_heartbeats",
+                "command_acknowledgments", 
+                "device_shadow",
+                "power_profiles",
+                "firmware_versions",
+                "firmware_updates",
+                "device_diagnostics",
+                "device_credentials"
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

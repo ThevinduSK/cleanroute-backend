@@ -146,12 +146,12 @@ def test_route_optimization():
         print(f"  • Total Duration: {summary['estimated_duration_min']} minutes")
         print(f"  • Average Fill: {summary['average_fill_pct']}%")
         
-        print(f"\n🗺️  Route Details (first 5 stops):")
+        print(f"\nRoute Details (first 5 stops):")
         for waypoint in route['waypoints'][:5]:
             if waypoint['type'] == 'depot':
                 print(f"  {waypoint['order']}. 📍 {waypoint['name']}")
             else:
-                print(f"  {waypoint['order']}. 🗑️  Bin {waypoint['bin_id']} "
+                print(f"  {waypoint['order']}. Bin {waypoint['bin_id']} "
                       f"({waypoint['predicted_fill']}%) - "
                       f"{waypoint['distance_from_prev_km']} km from previous")
         
@@ -258,11 +258,11 @@ def main():
     try:
         response = requests.get(f"{BASE_URL}/health", timeout=5)
         if response.status_code != 200:
-            print("❌ Server is not healthy!")
+            print("Server is not healthy!")
             return
-        print("✅ Server is running\n")
+        print("Server is running\n")
     except requests.exceptions.RequestException as e:
-        print(f"❌ Cannot connect to server: {e}")
+        print(f"[FAIL] Cannot connect to server: {e}")
         print("\nPlease start the server first:")
         print("  cd backend")
         print("  uvicorn app.main:app --host 0.0.0.0 --port 8000")
@@ -289,17 +289,17 @@ def main():
             passed += 1
             time.sleep(0.5)  # Small delay between tests
         except Exception as e:
-            print(f"\n❌ Test failed: {e}")
+            print(f"\n[FAIL] Test failed: {e}")
             failed += 1
     
     # Summary
     print_section("Test Summary")
-    print(f"✅ Passed: {passed}")
-    print(f"❌ Failed: {failed}")
+    print(f"[PASS] Passed: {passed}")
+    print(f"[FAIL] Failed: {failed}")
     print(f"Total: {passed + failed}")
     
     if failed == 0:
-        print("\n🎉 All tests passed!")
+        print("\nAll tests passed!")
     
     print("\n" + "="*70)
     print("  Next Steps:")

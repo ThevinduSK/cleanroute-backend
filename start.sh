@@ -4,7 +4,7 @@
 # Supports both CSV-only mode and Full System mode (PostgreSQL + MQTT)
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║       🚀 CleanRoute - Smart Waste Management System 🚀      ║"
+echo "║       CleanRoute - Smart Waste Management System      ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -22,7 +22,7 @@ FRONTEND_DIR="$SCRIPT_DIR/frontend"
 
 # Check if virtual environment exists
 if [ ! -d "$BACKEND_DIR/.venv" ]; then
-    echo -e "${RED}❌ Error: Virtual environment not found at $BACKEND_DIR/.venv${NC}"
+    echo -e "${RED}Error: Virtual environment not found at $BACKEND_DIR/.venv${NC}"
     echo "Please run setup.sh first"
     exit 1
 fi
@@ -59,12 +59,12 @@ if [ "$MODE" = "csv" ]; then
     
     # Check if mock data exists
     if [ ! -f "$BACKEND_DIR/mock_data/bins_config.csv" ]; then
-        echo -e "${RED}❌ Error: Mock data not found${NC}"
+        echo -e "${RED}Error: Mock data not found${NC}"
         echo "Generating mock data now..."
         cd "$BACKEND_DIR"
         source .venv/bin/activate
         python generate_mock_data.py
-        echo -e "${GREEN}✅ Mock data generated${NC}"
+        echo -e "${GREEN}Mock data generated${NC}"
     fi
     
     # Set environment for CSV mode
@@ -76,9 +76,9 @@ if [ "$MODE" = "csv" ]; then
     cd "$FRONTEND_DIR"
     
     echo ""
-    echo -e "${GREEN}✅ Starting Flask Frontend...${NC}"
-    echo -e "${CYAN}📍 Dashboard: http://localhost:5001${NC}"
-    echo -e "${CYAN}📍 Districts: http://localhost:5001/districts${NC}"
+    echo -e "${GREEN}Starting Flask Frontend...${NC}"
+    echo -e "${CYAN}Dashboard: http://localhost:5001${NC}"
+    echo -e "${CYAN}Districts: http://localhost:5001/districts${NC}"
     echo ""
     echo "Press Ctrl+C to stop"
     echo "════════════════════════════════════════════════════════════════"
@@ -87,19 +87,19 @@ if [ "$MODE" = "csv" ]; then
     python app.py
     
 else
-    echo -e "${GREEN}🔧 Starting Full System (Backend + Frontend + MQTT)${NC}"
+    echo -e "${GREEN}Starting Full System (Backend + Frontend + MQTT)${NC}"
     echo "════════════════════════════════════════════════════════════════"
     
     # Check and start PostgreSQL
     echo -e "${YELLOW}Checking PostgreSQL...${NC}"
     if pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ PostgreSQL is running${NC}"
+        echo -e "${GREEN}PostgreSQL is running${NC}"
     else
         echo -e "${YELLOW}PostgreSQL is not running. Starting automatically...${NC}"
         
         # Check if Docker is installed
         if ! command -v docker &> /dev/null; then
-            echo -e "${RED}❌ Docker is not installed${NC}"
+            echo -e "${RED}Docker is not installed${NC}"
             echo ""
             echo "Please install Docker:"
             echo "  https://docs.docker.com/desktop/install/mac-install/"
@@ -117,9 +117,9 @@ else
             sleep 3
             
             if pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
-                echo -e "${GREEN}✅ PostgreSQL started${NC}"
+                echo -e "${GREEN}PostgreSQL started${NC}"
             else
-                echo -e "${RED}❌ Failed to start PostgreSQL container${NC}"
+                echo -e "${RED}Failed to start PostgreSQL container${NC}"
                 exit 1
             fi
         else
@@ -137,11 +137,11 @@ else
             # Wait for PostgreSQL to be ready (max 30 seconds)
             for i in {1..30}; do
                 if pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
-                    echo -e "${GREEN}✅ PostgreSQL started successfully${NC}"
+                    echo -e "${GREEN}PostgreSQL started successfully${NC}"
                     break
                 fi
                 if [ $i -eq 30 ]; then
-                    echo -e "${RED}❌ PostgreSQL failed to start in time${NC}"
+                    echo -e "${RED}PostgreSQL failed to start in time${NC}"
                     echo "Check logs: docker logs cleanroute-postgres"
                     exit 1
                 fi
@@ -151,7 +151,7 @@ else
             # Initialize database schema
             echo -e "${YELLOW}Initializing database schema...${NC}"
             sleep 2
-            echo -e "${GREEN}✅ Database ready${NC}"
+            echo -e "${GREEN}Database ready${NC}"
         fi
     fi
     
@@ -171,18 +171,18 @@ else
     sleep 2
     
     if ps -p $BACKEND_PID > /dev/null; then
-        echo -e "${GREEN}✅ Backend API started (PID: $BACKEND_PID)${NC}"
+        echo -e "${GREEN}Backend API started (PID: $BACKEND_PID)${NC}"
     else
-        echo -e "${RED}❌ Backend failed to start. Check backend.log${NC}"
+        echo -e "${RED}Backend failed to start. Check backend.log${NC}"
     fi
     
     # Check if MQTT broker should be started
     echo ""
     echo -e "${YELLOW}Checking MQTT Broker...${NC}"
     if pgrep -x mosquitto > /dev/null; then
-        echo -e "${GREEN}✅ MQTT broker is running${NC}"
+        echo -e "${GREEN}MQTT broker is running${NC}"
     else
-        echo -e "${YELLOW}⚠️  MQTT broker not running${NC}"
+        echo -e "${YELLOW} MQTT broker not running${NC}"
         echo "Start manually if needed:"
         echo "  mosquitto -c mqtt/mosquitto_secure.conf"
     fi
@@ -194,7 +194,7 @@ else
         python -m app.mqtt_ingest > "$SCRIPT_DIR/mqtt_ingest.log" 2>&1 &
         MQTT_PID=$!
         sleep 1
-        echo -e "${GREEN}✅ MQTT Ingest started (PID: $MQTT_PID)${NC}"
+        echo -e "${GREEN}MQTT Ingest started (PID: $MQTT_PID)${NC}"
     fi
     
     # Start Frontend
@@ -206,18 +206,18 @@ else
     sleep 2
     
     if ps -p $FRONTEND_PID > /dev/null; then
-        echo -e "${GREEN}✅ Frontend started (PID: $FRONTEND_PID)${NC}"
+        echo -e "${GREEN}Frontend started (PID: $FRONTEND_PID)${NC}"
     else
-        echo -e "${RED}❌ Frontend failed to start. Check frontend.log${NC}"
+        echo -e "${RED}Frontend failed to start. Check frontend.log${NC}"
     fi
     
     # Summary
     echo ""
     echo "════════════════════════════════════════════════════════════════"
-    echo -e "${GREEN}🎉 System Started Successfully!${NC}"
+    echo -e "${GREEN}System Started Successfully!${NC}"
     echo "════════════════════════════════════════════════════════════════"
     echo ""
-    echo -e "${CYAN}📡 Services:${NC}"
+    echo -e "${CYAN}Services:${NC}"
     echo "  - Backend API:  http://localhost:8000"
     echo "  - Frontend:     http://localhost:5001"
     echo "  - API Docs:     http://localhost:8000/docs"
@@ -229,7 +229,7 @@ else
         echo "  - MQTT Ingest:  $SCRIPT_DIR/mqtt_ingest.log"
     fi
     echo ""
-    echo -e "${CYAN}🛑 To Stop:${NC}"
+    echo -e "${CYAN}To Stop:${NC}"
     echo "  kill $BACKEND_PID $FRONTEND_PID"
     if [[ $start_mqtt =~ ^[Yy]$ ]]; then
         echo "  kill $MQTT_PID"

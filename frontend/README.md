@@ -4,7 +4,7 @@ Modern neo-tech themed web interface for smart waste management system with ML-p
 
 ## Features
 
-### 🗺️ Interactive Map
+### Interactive Map
 - Real-time bin locations on Colombo map
 - Color-coded markers (green: normal, orange: warning, red: critical)
 - Click bins to see detailed information
@@ -173,10 +173,10 @@ The frontend reads from CSV files in `backend/mock_data/`:
 
 ## Browser Compatibility
 
-- Chrome/Edge: ✅ Fully supported
-- Firefox: ✅ Fully supported
-- Safari: ✅ Fully supported
-- Mobile: ✅ Responsive design
+- Chrome/Edge: Fully supported
+- Firefox: Fully supported
+- Safari: Fully supported
+- Mobile: Responsive design
 
 ## Performance
 

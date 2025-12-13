@@ -133,6 +133,10 @@ def load_bins():
             # Transform backend response to expected format
             bins = []
             for bin_info in bins_data:
+                # Determine status: sleep_mode=True means offline, sleep_mode=False means active
+                sleep_mode = bin_info.get('sleep_mode', True)
+                status = 'offline' if sleep_mode else 'active'
+                
                 bins.append({
                     'bin_id': bin_info.get('bin_id'),
                     'latitude': bin_info.get('lat'),
@@ -141,11 +145,12 @@ def load_bins():
                     'type': bin_info.get('bin_type', 'general'),
                     'capacity_liters': bin_info.get('capacity_l', 120),
                     # Include live telemetry data from backend
-                    'current_fill_level': bin_info.get('fill_pct', 0),
-                    'battery_level': (bin_info.get('batt_v', 4.2) / 4.2 * 100),
-                    'temperature': bin_info.get('temp_c'),
+                    'current_fill_level': bin_info.get('fill_pct', 0) if not sleep_mode else 0,
+                    'battery_level': (bin_info.get('batt_v', 4.2) / 4.2 * 100) if not sleep_mode else 0,
+                    'temperature': bin_info.get('temp_c') if not sleep_mode else None,
                     'last_updated': bin_info.get('last_seen'),
-                    'status': 'active' if bin_info.get('is_online') else 'offline'
+                    'status': status,
+                    'sleep_mode': sleep_mode
                 })
             
             print(f"✅ Loaded {len(bins)} bins from PostgreSQL backend")
@@ -667,6 +672,99 @@ def get_bins_latest():
     """Proxy bins/latest endpoint to FastAPI backend."""
     try:
         resp = requests.get(f"{BACKEND_URL}/bins/latest", timeout=5)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+# =============================================================================
+# COLLECTION DAY WORKFLOW PROXY
+# =============================================================================
+
+@app.route('/api/admin/collection/start', methods=['POST'])
+def collection_start():
+    """Proxy collection start to FastAPI backend."""
+    try:
+        from flask import request
+        auth_header = request.headers.get('Authorization')
+        headers = {'Authorization': auth_header} if auth_header else {}
+        resp = requests.post(
+            f"{BACKEND_URL}/admin/collection/start",
+            json=request.get_json(),
+            headers=headers,
+            timeout=10
+        )
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/admin/collection/check', methods=['POST'])
+def collection_check():
+    """Proxy collection check to FastAPI backend."""
+    try:
+        from flask import request
+        auth_header = request.headers.get('Authorization')
+        headers = {'Authorization': auth_header} if auth_header else {}
+        resp = requests.post(
+            f"{BACKEND_URL}/admin/collection/check",
+            json=request.get_json(),
+            headers=headers,
+            timeout=10
+        )
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/admin/collection/finish', methods=['POST'])
+def collection_finish():
+    """Proxy collection finish to FastAPI backend."""
+    try:
+        from flask import request
+        auth_header = request.headers.get('Authorization')
+        headers = {'Authorization': auth_header} if auth_header else {}
+        resp = requests.post(
+            f"{BACKEND_URL}/admin/collection/finish",
+            json=request.get_json(),
+            headers=headers,
+            timeout=10
+        )
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/admin/collection/end', methods=['POST'])
+def collection_end():
+    """Proxy collection end to FastAPI backend."""
+    try:
+        from flask import request
+        auth_header = request.headers.get('Authorization')
+        headers = {'Authorization': auth_header} if auth_header else {}
+        resp = requests.post(
+            f"{BACKEND_URL}/admin/collection/end",
+            json=request.get_json(),
+            headers=headers,
+            timeout=10
+        )
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503
+
+
+@app.route('/api/admin/collection/status/<zone_id>')
+def collection_status(zone_id):
+    """Proxy collection status to FastAPI backend."""
+    try:
+        from flask import request
+        auth_header = request.headers.get('Authorization')
+        headers = {'Authorization': auth_header} if auth_header else {}
+        resp = requests.get(
+            f"{BACKEND_URL}/admin/collection/status/{zone_id}",
+            headers=headers,
+            timeout=10
+        )
         return jsonify(resp.json()), resp.status_code
     except requests.exceptions.RequestException as e:
         return jsonify({'detail': f'Backend connection error: {str(e)}'}), 503

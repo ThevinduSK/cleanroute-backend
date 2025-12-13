@@ -13,6 +13,11 @@ let depotMarker = null;
 let routeMarkers = [];
 let routeArrows = [];
 
+// Admin/Collection variables
+let isAdminLoggedIn = false;
+let adminCredentials = null;
+let currentCollectionSession = null;
+
 // Initialize map when page loads
 document.addEventListener('DOMContentLoaded', function() {
     initializeMap();
@@ -20,6 +25,9 @@ document.addEventListener('DOMContentLoaded', function() {
     loadBins();
     setupDefaultDate();
     loadDistricts(); // Load districts for zone selection
+    
+    // Show collection day panel (will require login)
+    document.getElementById('collectionDayPanel').style.display = 'block';
     
     // Auto-refresh stats every 30 seconds
     setInterval(loadStats, 30000);
@@ -109,9 +117,13 @@ function addBinMarker(bin) {
     }
     
     const fillLevel = bin.current_fill_level || 0;
-    const color = getBinColor(fillLevel, bin.status);
+    const isSleeping = bin.sleep_mode === true || bin.status === 'offline';
+    const color = getBinColor(fillLevel, bin.status, isSleeping);
     
-    // Create custom icon
+    // Create custom icon - show moon for sleeping bins
+    const displayText = isSleeping ? '💤' : `${Math.round(fillLevel)}%`;
+    const fontSize = isSleeping ? '14px' : '12px';
+    
     const icon = L.divIcon({
         className: 'custom-marker',
         html: `
@@ -119,21 +131,22 @@ function addBinMarker(bin) {
                 width: 30px;
                 height: 30px;
                 background: ${color};
-                border: 3px solid rgba(255,255,255,0.5);
+                border: 3px solid ${isSleeping ? '#444' : 'rgba(255,255,255,0.5)'};
                 border-radius: 50%;
-                box-shadow: 0 0 15px ${color};
+                box-shadow: 0 0 ${isSleeping ? '5px' : '15px'} ${color};
                 position: relative;
                 cursor: pointer;
+                opacity: ${isSleeping ? '0.6' : '1'};
             ">
                 <div style="
                     position: absolute;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    color: #000;
+                    color: ${isSleeping ? '#888' : '#000'};
                     font-weight: bold;
-                    font-size: 12px;
-                ">${Math.round(fillLevel)}%</div>
+                    font-size: ${fontSize};
+                ">${displayText}</div>
             </div>
         `,
         iconSize: [30, 30],
@@ -152,7 +165,10 @@ function addBinMarker(bin) {
 }
 
 // Get bin color based on fill level and status
-function getBinColor(fillLevel, status) {
+function getBinColor(fillLevel, status, isSleeping = false) {
+    if (isSleeping || status === 'offline') {
+        return '#444444'; // Dark grey for sleeping
+    }
     if (status !== 'active') {
         return '#666666';
     }
@@ -170,6 +186,9 @@ function createPopupContent(bin) {
     const fillLevel = bin.current_fill_level || 0;
     const battery = bin.battery_level || 0;
     const status = bin.status || 'unknown';
+    const isSleeping = bin.sleep_mode === true || status === 'offline';
+    
+    const statusDisplay = isSleeping ? '😴 Sleeping (Offline)' : (status === 'active' ? '🟢 Active' : status);
     
     return `
         <div class="popup-content">
@@ -179,6 +198,11 @@ function createPopupContent(bin) {
                 <span class="popup-value">${bin.bin_id}</span>
             </div>
             <div class="popup-info">
+                <span class="popup-label">Status:</span>
+                <span class="popup-value">${statusDisplay}</span>
+            </div>
+            ${!isSleeping ? `
+            <div class="popup-info">
                 <span class="popup-label">Fill Level:</span>
                 <span class="popup-value">${Math.round(fillLevel)}%</span>
             </div>
@@ -186,10 +210,11 @@ function createPopupContent(bin) {
                 <span class="popup-label">Battery:</span>
                 <span class="popup-value">${Math.round(battery)}%</span>
             </div>
-            <div class="popup-info">
-                <span class="popup-label">Status:</span>
-                <span class="popup-value" style="text-transform: capitalize;">${status}</span>
+            ` : `
+            <div class="popup-info" style="color: #888;">
+                <em>Device is sleeping to save power</em>
             </div>
+            `}
             <div class="popup-info">
                 <span class="popup-label">Capacity:</span>
                 <span class="popup-value">${bin.capacity_liters}L</span>
@@ -1268,3 +1293,447 @@ document.addEventListener('click', function(event) {
         closeModal();
     }
 });
+
+
+// =============================================================================
+// COLLECTION DAY WORKFLOW (Admin Functions)
+// =============================================================================
+
+// Admin Login
+async function adminLogin() {
+    const username = document.getElementById('adminUsername').value;
+    const password = document.getElementById('adminPassword').value;
+    
+    if (!username || !password) {
+        showNotification('Please enter username and password', 'error');
+        return;
+    }
+    
+    showLoading(true);
+    
+    try {
+        const response = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            isAdminLoggedIn = true;
+            adminCredentials = btoa(`${username}:${password}`);
+            
+            document.getElementById('adminLoginSection').style.display = 'none';
+            document.getElementById('collectionWorkflow').style.display = 'block';
+            document.getElementById('loggedInUser').textContent = username;
+            
+            showNotification(`Welcome, ${username}!`, 'success');
+            
+            // Enable start button if zone is selected
+            updateCollectionButtons();
+        } else {
+            showNotification(data.detail || 'Login failed', 'error');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        showNotification('Login failed. Check if backend is running.', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Admin Logout
+function adminLogout() {
+    isAdminLoggedIn = false;
+    adminCredentials = null;
+    currentCollectionSession = null;
+    
+    document.getElementById('adminLoginSection').style.display = 'block';
+    document.getElementById('collectionWorkflow').style.display = 'none';
+    document.getElementById('collectionStatus').style.display = 'none';
+    document.getElementById('adminUsername').value = '';
+    document.getElementById('adminPassword').value = '';
+    
+    updateCollectionButtons();
+    showNotification('Logged out', 'info');
+}
+
+// Update collection buttons based on state
+function updateCollectionButtons() {
+    const hasZone = selectedZone !== null;
+    const loggedIn = isAdminLoggedIn;
+    const hasSession = currentCollectionSession !== null;
+    
+    document.getElementById('btnStartCollection').disabled = !loggedIn || !hasZone || hasSession;
+    document.getElementById('btnCheckStatus').disabled = !loggedIn || !hasZone;
+    document.getElementById('btnFinishCollection').disabled = !loggedIn || !hasZone;
+    document.getElementById('btnEndCollection').disabled = !loggedIn || !hasZone;
+}
+
+// Make API request with admin auth
+async function adminApiRequest(url, method = 'POST', body = null) {
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (adminCredentials) {
+        headers['Authorization'] = `Basic ${adminCredentials}`;
+    }
+    
+    const options = { method, headers };
+    if (body) {
+        options.body = JSON.stringify(body);
+    }
+    
+    const response = await fetch(url, options);
+    const data = await response.json();
+    
+    if (!response.ok) {
+        throw new Error(data.detail || 'API request failed');
+    }
+    
+    return data;
+}
+
+// Step 1: Start Collection (Wake Up Devices)
+async function startCollection() {
+    if (!selectedZone) {
+        showNotification('Please select a zone first', 'error');
+        return;
+    }
+    
+    showLoading(true);
+    
+    try {
+        const data = await adminApiRequest('/api/admin/collection/start', 'POST', {
+            zone_id: selectedZone.id,
+            zone_name: selectedZone.name
+        });
+        
+        if (data.success) {
+            currentCollectionSession = {
+                id: data.session_id,
+                status: 'started',
+                zone_id: data.zone_id,
+                bins_total: data.bins_total,
+                bins_responded: 0
+            };
+            
+            updateCollectionStatusUI('started', data);
+            showNotification(`🔔 Collection started! Waking up ${data.bins_awakened} bins...`, 'success');
+            
+            // Refresh bins after a delay to show updated status
+            setTimeout(() => loadBins(), 3000);
+        } else {
+            showNotification(data.message || 'Failed to start collection', 'error');
+        }
+    } catch (error) {
+        console.error('Start collection error:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        showLoading(false);
+        updateCollectionButtons();
+    }
+}
+
+// Step 2: Check Status
+async function checkCollectionStatus() {
+    if (!selectedZone) {
+        showNotification('Please select a zone first', 'error');
+        return;
+    }
+    
+    showLoading(true);
+    
+    try {
+        const data = await adminApiRequest('/api/admin/collection/check', 'POST', {
+            zone_id: selectedZone.id,
+            zone_name: selectedZone.name
+        });
+        
+        updateCollectionStatusUI('checked', data);
+        
+        // Highlight responded vs pending bins on map
+        highlightBinsByResponse(data.bins);
+        
+        showNotification(`📊 Status: ${data.bins_responded}/${data.bins_total} bins responded`, 'info');
+        
+        // Refresh bins to show updated fill levels
+        loadBins();
+        
+    } catch (error) {
+        console.error('Check status error:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Step 3: Finish Collection (Pre-end check)
+async function finishCollection() {
+    if (!selectedZone) {
+        showNotification('Please select a zone first', 'error');
+        return;
+    }
+    
+    showLoading(true);
+    
+    try {
+        const data = await adminApiRequest('/api/admin/collection/finish', 'POST', {
+            zone_id: selectedZone.id,
+            zone_name: selectedZone.name
+        });
+        
+        updateCollectionStatusUI('finished', data);
+        
+        if (data.bins_potentially_missed > 0) {
+            showNotification(`⚠️ Warning: ${data.bins_potentially_missed} bins may have been missed!`, 'warning');
+            highlightMissedBins(data.missed_bins);
+        } else {
+            showNotification(`✅ All bins collected! Ready to end collection.`, 'success');
+        }
+        
+        // Refresh bins
+        loadBins();
+        
+    } catch (error) {
+        console.error('Finish collection error:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Step 4: End Collection (Put devices to sleep)
+async function endCollection() {
+    if (!selectedZone) {
+        showNotification('Please select a zone first', 'error');
+        return;
+    }
+    
+    if (!confirm(`End collection for ${selectedZone.name}?\n\nThis will put all devices to sleep to save battery.`)) {
+        return;
+    }
+    
+    showLoading(true);
+    
+    try {
+        const data = await adminApiRequest('/api/admin/collection/end', 'POST', {
+            zone_id: selectedZone.id,
+            zone_name: selectedZone.name
+        });
+        
+        currentCollectionSession = null;
+        updateCollectionStatusUI('ended', data);
+        
+        showNotification(`😴 Collection ended! ${data.bins_asleep} devices put to sleep.`, 'success');
+        
+        // Refresh bins
+        setTimeout(() => loadBins(), 2000);
+        
+    } catch (error) {
+        console.error('End collection error:', error);
+        showNotification(error.message, 'error');
+    } finally {
+        showLoading(false);
+        updateCollectionButtons();
+    }
+}
+
+// Update collection status UI
+function updateCollectionStatusUI(status, data) {
+    document.getElementById('collectionStatus').style.display = 'block';
+    
+    const statusColors = {
+        'started': '#00ff88',
+        'checked': '#0088ff', 
+        'finished': '#ffaa00',
+        'ended': '#ff0055'
+    };
+    
+    const statusText = {
+        'started': '🔔 Collection Started (Devices Waking)',
+        'checked': '📊 Status Checked',
+        'finished': '✅ Collection Finished (Awaiting End)',
+        'ended': '😴 Collection Ended (Devices Sleeping)'
+    };
+    
+    document.getElementById('collectionStatusText').textContent = statusText[status] || status;
+    document.getElementById('collectionStatusText').style.color = statusColors[status] || '#fff';
+    
+    if (data) {
+        document.getElementById('binsRespondedText').textContent = data.bins_responded || 0;
+        document.getElementById('binsTotalText').textContent = data.bins_total || 0;
+    }
+}
+
+// Highlight bins based on response status
+function highlightBinsByResponse(binsData) {
+    if (!binsData) return;
+    
+    binsData.forEach(binData => {
+        const marker = markers[binData.bin_id];
+        if (marker) {
+            if (binData.responded) {
+                marker.setOpacity(1);
+                marker.setZIndexOffset(1000);
+            } else {
+                marker.setOpacity(0.4);
+                marker.setZIndexOffset(0);
+            }
+        }
+    });
+}
+
+// Highlight potentially missed bins
+function highlightMissedBins(missedBins) {
+    if (!missedBins) return;
+    
+    missedBins.forEach(binData => {
+        const marker = markers[binData.bin_id];
+        if (marker) {
+            // Add pulsing effect for missed bins
+            const icon = marker.getIcon();
+            if (icon) {
+                // Flash the marker
+                let flash = 0;
+                const flashInterval = setInterval(() => {
+                    marker.setOpacity(flash % 2 === 0 ? 1 : 0.3);
+                    flash++;
+                    if (flash > 10) clearInterval(flashInterval);
+                }, 300);
+            }
+        }
+    });
+}
+
+// Override showZoneOnMap to also update collection buttons
+const originalShowZoneOnMap = showZoneOnMap;
+showZoneOnMap = function() {
+    // Call original function (defined earlier in the file)
+    const districtId = document.getElementById('districtSelect').value;
+    const zoneId = document.getElementById('zoneSelect').value;
+    
+    clearZoneVisualization();
+    
+    if (!districtId || !zoneId) {
+        document.getElementById('optimizeZoneBtn').disabled = true;
+        document.getElementById('depotInfo').style.display = 'none';
+        selectedZone = null;
+        updateCollectionButtons();
+        return;
+    }
+    
+    const district = districtsData.find(d => d.id === districtId);
+    if (!district) return;
+    
+    const zone = district.zones.find(z => z.id === zoneId);
+    if (!zone) return;
+    
+    selectedZone = zone;
+    
+    // Draw zone boundary
+    const bounds = zone.bounds;
+    if (bounds) {
+        zoneBoundary = L.rectangle(
+            [[bounds.south, bounds.west], [bounds.north, bounds.east]],
+            {
+                color: zone.color || '#00ff88',
+                weight: 3,
+                fillColor: zone.color || '#00ff88',
+                fillOpacity: 0.15,
+                dashArray: '10, 5'
+            }
+        ).addTo(map);
+        
+        map.fitBounds([[bounds.south, bounds.west], [bounds.north, bounds.east]], { padding: [50, 50] });
+    }
+    
+    // Add depot marker
+    if (zone.depot && zone.depot.lat && zone.depot.lon) {
+        const depotIcon = L.divIcon({
+            className: 'depot-marker',
+            html: `
+                <div style="
+                    width: 45px;
+                    height: 45px;
+                    background: linear-gradient(135deg, ${zone.color || '#00ff88'}, #0088ff);
+                    border: 4px solid #fff;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 20px;
+                    box-shadow: 0 0 25px ${zone.color || '#00ff88'};
+                    animation: pulse 2s infinite;
+                ">🏠</div>
+            `,
+            iconSize: [45, 45],
+            iconAnchor: [22, 22]
+        });
+        
+        depotMarker = L.marker([zone.depot.lat, zone.depot.lon], { icon: depotIcon })
+            .addTo(map)
+            .bindPopup(`
+                <div class="popup-content">
+                    <div class="popup-title">📍 Starting Depot</div>
+                    <div class="popup-info">
+                        <span class="popup-label">Name:</span>
+                        <span class="popup-value">${zone.depot.name || 'Zone Depot'}</span>
+                    </div>
+                    <div class="popup-info">
+                        <span class="popup-label">Zone:</span>
+                        <span class="popup-value">${zone.name}</span>
+                    </div>
+                </div>
+            `);
+        
+        document.getElementById('depotName').textContent = zone.depot.name || 'Zone Depot';
+        document.getElementById('depotInfo').style.display = 'block';
+    }
+    
+    // Enable optimize button
+    document.getElementById('optimizeZoneBtn').disabled = false;
+    
+    // Highlight bins in this zone
+    highlightBinsInZone(zone);
+    
+    // Update collection workflow buttons
+    updateCollectionButtons();
+    
+    // Check for existing collection session
+    checkExistingSession(zone.id);
+};
+
+// Check for existing collection session
+async function checkExistingSession(zoneId) {
+    if (!isAdminLoggedIn) return;
+    
+    try {
+        const response = await fetch(`/api/admin/collection/status/${zoneId}`, {
+            headers: {
+                'Authorization': `Basic ${adminCredentials}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.has_active_session && data.session) {
+                currentCollectionSession = data.session;
+                updateCollectionStatusUI(data.session.status, {
+                    bins_responded: data.bins_status?.responded || 0,
+                    bins_total: data.bins_status?.total || 0
+                });
+            } else {
+                currentCollectionSession = null;
+                document.getElementById('collectionStatus').style.display = 'none';
+            }
+            updateCollectionButtons();
+        }
+    } catch (error) {
+        console.log('Could not check session status:', error);
+    }
+}

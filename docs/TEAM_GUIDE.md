@@ -1,6 +1,6 @@
 # CleanRoute AI - Team Collaboration Guide
 
-## 🎯 System Overview
+## System Overview
 
 CleanRoute is a smart waste bin monitoring system that helps municipal councils optimize garbage collection routes. The system consists of three main components:
 
@@ -10,14 +10,14 @@ CleanRoute is a smart waste bin monitoring system that helps municipal councils 
 
 ## ✨ **NEW: ML Prediction & Route Optimization IMPLEMENTED!**
 
-✅ **EWMA-based fill prediction** - Predict future bin fill levels
-✅ **Greedy nearest-neighbor routing** - Generate optimal collection routes
-✅ **RESTful API endpoints** - Ready for frontend integration
-✅ **Configurable thresholds** - Adjust for different scenarios
+- EWMA-based fill prediction** - Predict future bin fill levels
+- Greedy nearest-neighbor routing** - Generate optimal collection routes
+- RESTful API endpoints** - Ready for frontend integration
+- Configurable thresholds** - Adjust for different scenarios
 
 📚 **Quick Start:** See `ML_ROUTING_QUICKREF.md` for API usage
 📖 **Full Guide:** See `ML_ROUTING_GUIDE.md` for implementation details
-🧪 **Testing:** Run `python backend/test_ml_routing.py`
+- Testing:** Run `python backend/test_ml_routing.py`
 
 **New API Endpoints:**
 - `GET /bins/forecast` - Predict all bins at future time
@@ -155,9 +155,9 @@ Publish to: `cleanroute/bins/B001/telemetry`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `bin_id` | string | ✅ | Unique bin identifier |
-| `ts` | ISO8601 | ✅ | Timestamp in UTC |
-| `fill_pct` | float | ✅ | Fill percentage (0-100) |
+| `bin_id` | string | Yes | Unique bin identifier |
+| `ts` | ISO8601 | Yes | Timestamp in UTC |
+| `fill_pct` | float | Yes | Fill percentage (0-100) |
 | `batt_v` | float | ⬜ | Battery voltage |
 | `temp_c` | float | ⬜ | Temperature in Celsius |
 | `emptied` | int | ⬜ | 1 if just emptied, 0 otherwise |
@@ -236,7 +236,7 @@ Subscribe to: `cleanroute/bins/B001/command`
 
 ---
 
-## 🖥️ For UI/ML Team (Person 3)
+## For UI/ML Team (Person 3)
 
 ### What the Backend Provides
 
@@ -545,7 +545,7 @@ setInterval(async () => {
 
 ---
 
-## 🔄 Complete Collection Day Flow
+## Complete Collection Day Flow
 
 ### Timeline Example
 
@@ -597,7 +597,7 @@ setInterval(async () => {
 
 ---
 
-## 📡 Data Flow Diagram
+## Data Flow Diagram
 
 ```
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
@@ -631,7 +631,7 @@ setInterval(async () => {
 
 ---
 
-## 🛠️ Team Responsibilities Summary
+## Team Responsibilities Summary
 
 ### Hardware (Person 1)
 | Task | Status |
@@ -647,13 +647,13 @@ setInterval(async () => {
 ### Backend (Person 2)
 | Task | Status |
 |------|--------|
-| MQTT subscriber | ✅ |
-| MQTT publisher (commands) | ✅ |
-| PostgreSQL storage | ✅ |
-| REST API (25 endpoints) | ✅ |
-| Health monitoring | ✅ |
-| Alerts system | ✅ |
-| Collection workflow | ✅ |
+| MQTT subscriber | Yes |
+| MQTT publisher (commands) | Yes |
+| PostgreSQL storage | Yes |
+| REST API (25 endpoints) | Yes |
+| Health monitoring | Yes |
+| Alerts system | Yes |
+| Collection workflow | Yes |
 
 ### UI/ML (Person 3)
 | Task | Status |
@@ -668,7 +668,7 @@ setInterval(async () => {
 
 ---
 
-## 🧪 Testing Together
+## Testing Together
 
 ### Test Flow 1: Device → Backend → UI
 
@@ -740,7 +740,7 @@ A: `lat` and `lon` fields in `/bins/latest` response.
 
 ---
 
-## 🚀 Next Steps
+## Next Steps
 
 1. **Hardware**: Implement MQTT on ESP32, test with backend
 2. **UI**: Build basic map view, connect to API

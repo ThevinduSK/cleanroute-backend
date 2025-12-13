@@ -286,7 +286,7 @@ def export_to_csv(records: List[Dict], filename: str = "telemetry_data.csv"):
     filepath = os.path.join(CSV_OUTPUT_DIR, filename)
     
     if not records:
-        print("⚠️  No records to export")
+        print("No records to export")
         return filepath
     
     # Write CSV
@@ -298,7 +298,7 @@ def export_to_csv(records: List[Dict], filename: str = "telemetry_data.csv"):
         for record in records:
             writer.writerow(record)
     
-    print(f"✅ Exported {len(records)} records to {filepath}")
+    print(f"Exported {len(records)} records to {filepath}")
     return filepath
 
 
@@ -315,7 +315,7 @@ def export_bins_to_csv(bins: List[Dict], filename: str = "bins_config.csv"):
         for bin_config in bins:
             writer.writerow(bin_config)
     
-    print(f"✅ Exported {len(bins)} bin configs to {filepath}")
+    print(f"Exported {len(bins)} bin configs to {filepath}")
     return filepath
 
 
@@ -346,17 +346,17 @@ def register_bins_via_api():
             if response.status_code == 200:
                 registered += 1
             else:
-                print(f"⚠️  Failed to register {bin_config['id']}: {response.status_code}")
+                print(f"Failed to register {bin_config['id']}: {response.status_code}")
         except Exception as e:
-            print(f"⚠️  Error registering {bin_config['id']}: {e}")
+            print(f"Error registering {bin_config['id']}: {e}")
     
-    print(f"✅ Registered {registered}/{len(BIN_LOCATIONS)} bins")
+    print(f"Registered {registered}/{len(BIN_LOCATIONS)} bins")
     return registered
 
 
 def insert_telemetry_to_db(records: List[Dict]):
     """Insert telemetry records directly into database (fast)."""
-    print(f"\n📥 Inserting {len(records)} telemetry records to database...")
+    print(f"\nInserting {len(records)} telemetry records to database...")
     
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -378,19 +378,19 @@ def insert_telemetry_to_db(records: List[Dict]):
         execute_batch(cur, insert_query, data, page_size=100)
         conn.commit()
         
-        print(f"✅ Inserted {len(records)} records successfully")
+        print(f"Inserted {len(records)} records successfully")
         
         cur.close()
         conn.close()
         
     except Exception as e:
-        print(f"❌ Database error: {e}")
+        print(f"Database error: {e}")
         raise
 
 
 def setup_offline_bin():
     """Set last_seen for offline bin to 90 minutes ago."""
-    print("\n🔌 Setting up offline bin scenario...")
+    print("\nSetting up offline bin scenario...")
     
     try:
         conn = psycopg2.connect(**DB_CONFIG)
@@ -408,10 +408,10 @@ def setup_offline_bin():
         cur.close()
         conn.close()
         
-        print(f"✅ Set {EDGE_CASES['offline']} as offline")
+        print(f"Set {EDGE_CASES['offline']} as offline")
         
     except Exception as e:
-        print(f"⚠️  Error setting offline bin: {e}")
+        print(f"Error setting offline bin: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -432,10 +432,10 @@ def print_summary(total_records: int):
     print("  📊 GENERATION COMPLETE")
     print("="*70)
     
-    print(f"\n✅ Bins created: {len(BIN_LOCATIONS)}")
-    print(f"✅ Telemetry records: {total_records:,}")
-    print(f"✅ Time range: {DAYS_OF_HISTORY} days")
-    print(f"✅ CSV files exported to: {CSV_OUTPUT_DIR}/")
+    print(f"\nBins created: {len(BIN_LOCATIONS)}")
+    print(f"Telemetry records: {total_records:,}")
+    print(f"Time range: {DAYS_OF_HISTORY} days")
+    print(f"CSV files exported to: {CSV_OUTPUT_DIR}/")
     
     # Bin type distribution
     type_counts = {}
@@ -447,13 +447,13 @@ def print_summary(total_records: int):
     for bin_type, count in sorted(type_counts.items()):
         print(f"   • {bin_type.capitalize()}: {count} bins")
     
-    print("\n⚠️  Edge Cases Configured:")
+    print("\nEdge Cases Configured:")
     print(f"   • Battery low: {len(EDGE_CASES['battery_low'])} bins {EDGE_CASES['battery_low']}")
     print(f"   • Offline: {len(EDGE_CASES['offline'])} bin {EDGE_CASES['offline']}")
     print(f"   • Erratic data: {len(EDGE_CASES['erratic'])} bin {EDGE_CASES['erratic']}")
     print(f"   • Just emptied: {len(EDGE_CASES['just_emptied'])} bin {EDGE_CASES['just_emptied']}")
     
-    print("\n🚀 Next Steps:")
+    print("\nNext Steps:")
     print("   1. Test predictions:")
     print('      curl "http://localhost:8000/bins/forecast?target_time=tomorrow_afternoon"')
     print("\n   2. Generate route:")
@@ -473,7 +473,7 @@ def main():
     export_bins_to_csv(BIN_LOCATIONS)
     
     # Step 2: Generate historical telemetry data
-    print(f"\n🔄 Step 2: Generating {DAYS_OF_HISTORY} days of telemetry data...")
+    print(f"\nStep 2: Generating {DAYS_OF_HISTORY} days of telemetry data...")
     all_records = []
     
     for i, bin_config in enumerate(BIN_LOCATIONS, 1):
@@ -481,10 +481,10 @@ def main():
         records = generate_historical_telemetry(bin_config, DAYS_OF_HISTORY)
         all_records.extend(records)
     
-    print(f"   ✅ Generated {len(all_records):,} telemetry records for {len(BIN_LOCATIONS)} bins")
+    print(f"   Generated {len(all_records):,} telemetry records for {len(BIN_LOCATIONS)} bins")
     
     # Step 3: Apply edge cases
-    print("\n⚙️  Step 3: Applying edge case scenarios...")
+    print("\nStep 3: Applying edge case scenarios...")
     all_records = apply_edge_cases(all_records)
     
     # Step 4: Export telemetry to CSV
@@ -495,12 +495,12 @@ def main():
     try:
         registered = register_bins_via_api()
         if registered == 0:
-            print("\n⚠️  Warning: Could not register bins via API.")
+            print("\nWarning: Could not register bins via API.")
             print("    Make sure backend server is running:")
             print("    cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000")
             return
     except Exception as e:
-        print(f"\n❌ Error connecting to API: {e}")
+        print(f"\nError connecting to API: {e}")
         print("    Make sure backend server is running!")
         return
     

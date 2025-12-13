@@ -2,7 +2,7 @@
 
 IoT-based waste bin monitoring and route optimization backend.
 
-## 🚀 Quick Start
+## Quick Start
 
 See [QUICKSTART.md](QUICKSTART.md) for setup instructions.
 
@@ -37,7 +37,7 @@ cleanroute-backend/
     └── DEVICE_SETUP.md   # Hardware setup
 ```
 
-## 🔐 Security
+## Security
 
 - **TLS encryption** on port 8883
 - **Device authentication** via username/password
@@ -52,7 +52,7 @@ cleanroute-backend/
 | [docs/TEAM_GUIDE.md](docs/TEAM_GUIDE.md) | Team collaboration |
 | [docs/DEVICE_SETUP.md](docs/DEVICE_SETUP.md) | ESP32/Hardware setup |
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Backend:** FastAPI, PostgreSQL, Paho-MQTT
 - **Frontend:** Flask, Leaflet.js

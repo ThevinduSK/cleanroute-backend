@@ -29,10 +29,10 @@ def test_csv_data_quality():
     
     bins_df, telemetry_df = load_csv_data()
     
-    print(f"✅ Bins loaded: {len(bins_df)}")
-    print(f"✅ Telemetry records: {len(telemetry_df)}")
-    print(f"✅ Time range: {telemetry_df['ts'].min()} to {telemetry_df['ts'].max()}")
-    print(f"✅ Days of history: {(telemetry_df['ts'].max() - telemetry_df['ts'].min()).days}")
+    print(f"Done: Bins loaded: {len(bins_df)}")
+    print(f"Done: Telemetry records: {len(telemetry_df)}")
+    print(f"Done: Time range: {telemetry_df['ts'].min()} to {telemetry_df['ts'].max()}")
+    print(f"Done: Days of history: {(telemetry_df['ts'].max() - telemetry_df['ts'].min()).days}")
     
     # Check data per bin
     records_per_bin = telemetry_df.groupby('bin_id').size()
@@ -135,7 +135,7 @@ def test_predictions():
     print(f"   Total bins analyzed: {len(predictions_df)}")
     print(f"   Bins needing collection (≥80%): {len(bins_needing_collection)}")
     
-    print(f"\n🗑️  Bins to Collect (sorted by predicted fill):")
+    print(f"\nBins to Collect (sorted by predicted fill):")
     for _, pred in bins_needing_collection.sort_values('predicted_fill', ascending=False).head(10).iterrows():
         print(f"   {pred['bin_id']:5} | {pred['current_fill']:5.1f}% → {pred['predicted_fill']:5.1f}% "
               f"| {pred['fill_rate']:+6.3f}%/h | {pred['confidence']:6} | {pred['type']}")
@@ -147,10 +147,10 @@ def test_route_optimization(bins_to_collect):
     print_section("TEST 3: Route Optimization")
     
     if not bins_to_collect:
-        print("⚠️  No bins need collection")
+        print("No bins need collection")
         return
     
-    print(f"🗺️  Optimizing route for {len(bins_to_collect)} bins...")
+    print(f"Optimizing route for {len(bins_to_collect)} bins...")
     
     # Use Independence Square as depot
     depot = {"lat": 6.9271, "lon": 79.8612, "name": "Independence Square (Depot)"}
@@ -159,7 +159,7 @@ def test_route_optimization(bins_to_collect):
     route_result = route_optimizer.optimize_route(bins_to_collect, depot, algorithm="greedy")
     
     if 'route' not in route_result:
-        print("❌ Route optimization failed")
+        print("ERROR: Route optimization failed")
         return
     
     route = route_result['route']
@@ -178,7 +178,7 @@ def test_route_optimization(bins_to_collect):
         if waypoint['type'] == 'depot':
             print(f"   {waypoint['order']:2}. 📍 {waypoint['name']}")
         else:
-            print(f"   {waypoint['order']:2}. 🗑️  {waypoint['bin_id']} - {waypoint['predicted_fill']:.1f}% "
+            print(f"   {waypoint['order']:2}. Bin {waypoint['bin_id']} - {waypoint['predicted_fill']:.1f}% "
                   f"({waypoint['distance_from_prev_km']:.2f} km from prev)")
     
     if len(route['waypoints']) > 10:
@@ -251,20 +251,20 @@ def main():
         test_scenarios()
         
         # Summary
-        print_section("✅ All Tests Complete!")
+        print_section("Done: All Tests Complete!")
         print("The ML prediction and route optimization are working correctly!")
         print("\n🎯 Key Achievements:")
-        print("   ✅ EWMA fill rate calculation from CSV data")
-        print("   ✅ Future fill level predictions")
-        print("   ✅ Greedy nearest-neighbor route optimization")
-        print("   ✅ Real Colombo GPS coordinates")
-        print("   ✅ Realistic 30-day historical patterns")
+        print("   Done: EWMA fill rate calculation from CSV data")
+        print("   Done: Future fill level predictions")
+        print("   Done: Greedy nearest-neighbor route optimization")
+        print("   Done: Real Colombo GPS coordinates")
+        print("   Done: Realistic 30-day historical patterns")
         
     except FileNotFoundError:
-        print("\n❌ Error: CSV files not found!")
+        print("\nERROR: Error: CSV files not found!")
         print("Run this first: python generate_mock_data.py --csv-only")
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nERROR: Error: {e}")
         import traceback
         traceback.print_exc()
 

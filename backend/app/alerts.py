@@ -70,7 +70,7 @@ def check_battery_alerts() -> List[Dict[str, Any]]:
             "battery_v": bin_data['batt_v']
         })
         
-        logger.warning(f"⚠️ {message}")
+        logger.warning(f"Low battery: {message}")
     
     return alerts_created
 
@@ -119,7 +119,7 @@ def check_offline_bins() -> List[Dict[str, Any]]:
             "offline_minutes": minutes_ago
         })
         
-        logger.warning(f"📡 {message}")
+        logger.warning(f"Offline: {message}")
     
     return alerts_created
 
@@ -167,7 +167,7 @@ def check_overflow_risk() -> List[Dict[str, Any]]:
             "lon": bin_data['lon']
         })
         
-        logger.warning(f"🗑️ {message}")
+        logger.warning(f"Overflow risk: {message}")
     
     return alerts_created
 
@@ -296,7 +296,7 @@ def get_fleet_health() -> Dict[str, Any]:
 
 def run_health_checks() -> Dict[str, Any]:
     """Run all health checks and return summary."""
-    logger.info("🏥 Running health checks...")
+    logger.info("Running health checks...")
     
     battery_alerts = check_battery_alerts()
     offline_alerts = check_offline_bins()
@@ -312,5 +312,5 @@ def run_health_checks() -> Dict[str, Any]:
         "total_new_alerts": len(battery_alerts) + len(offline_alerts) + len(overflow_alerts)
     }
     
-    logger.info(f"✅ Health check complete: {summary['total_new_alerts']} new alerts")
+    logger.info(f"Health check complete: {summary['total_new_alerts']} new alerts")
     return summary

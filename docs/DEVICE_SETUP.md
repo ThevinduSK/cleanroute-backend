@@ -77,11 +77,11 @@ void setup() {
 ## Recommended Solution: **AP Mode (Option 1)**
 
 ### Why?
-- ✅ No extra hardware (OLED/buttons) needed
-- ✅ Works with any smartphone
-- ✅ Intuitive web interface
-- ✅ Can capture user details easily
-- ✅ Cost-effective
+- No extra hardware (OLED/buttons) needed
+- Works with any smartphone
+- Intuitive web interface
+- Can capture user details easily
+- Cost-effective
 
 ### Hardware Required:
 - ESP32 (built-in WiFi)

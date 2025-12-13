@@ -105,9 +105,9 @@ def main():
     try:
         # Check if server is running
         response = requests.get(f"{BASE_URL}/health", timeout=2)
-        print(f"\n✅ Server is running at {BASE_URL}")
+        print(f"\nServer is running at {BASE_URL}")
     except requests.exceptions.RequestException:
-        print(f"\n❌ Server is not running at {BASE_URL}")
+        print(f"\nServer is not running at {BASE_URL}")
         print("Please start the server first:")
         print("  cd backend && source .venv/bin/activate")
         print("  uvicorn app.main:app --host 0.0.0.0 --port 8000")
@@ -130,9 +130,9 @@ def main():
             test_func()
             time.sleep(0.5)
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
     
-    print_section("✅ All Tests Complete!")
+    print_section("All Tests Complete!")
     print("Check the server logs to see MQTT commands being published.")
     print("\nNext steps:")
     print("1. Subscribe to MQTT commands:")

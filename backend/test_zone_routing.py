@@ -48,7 +48,7 @@ def test_zone_routes():
         print(f"   Combined Distance: {summary['total_distance_km']} km")
         print(f"   Combined Time: {summary['total_duration_min']} minutes")
         
-        print(f"\n🗺️  ZONE DETAILS:\n")
+        print(f"\nZONE DETAILS:\n")
         for zone in data['zones']:
             print(f"{'─'*70}")
             print(f"📍 {zone['zone_name']}")
@@ -68,7 +68,7 @@ def test_zone_routes():
                     if wp['type'] == 'depot':
                         print(f"      {i}. 🏢 {wp['location']}")
                     else:
-                        print(f"      {i}. 🗑️  {wp.get('bin_id', 'N/A')} - "
+                        print(f"      {i}. Bin {wp.get('bin_id', 'N/A')} - "
                               f"{wp.get('predicted_fill_level', 0)}% full")
                 
                 if len(zone['waypoints']) > 3:
@@ -105,16 +105,16 @@ def test_single_vs_zone_comparison():
         print(f"  Trucks needed: {zone_data['summary']['total_zones']}")
         print(f"  Active Zones: {zone_data['summary']['total_zones']}")
     
-    print("\n💡 BENEFITS:")
+    print("\nBENEFITS:")
     if zone_data.get('zones'):
         parallel_time = max([z['summary']['estimated_duration_min'] for z in zone_data['zones']])
         single_time = single_data.get('estimated_time_hours', 0) * 60
         
         if single_time > 0:
             time_savings = ((single_time - parallel_time) / single_time) * 100
-            print(f"  ✅ Time savings: {time_savings:.1f}% (with parallel operation)")
-            print(f"  ✅ Average distance per truck: {zone_data['summary']['total_distance_km'] / zone_data['summary']['total_zones']:.1f} km")
-            print(f"  ✅ Allows {zone_data['summary']['total_zones']} trucks to work simultaneously")
+            print(f"  - Time savings: {time_savings:.1f}% (with parallel operation)")
+            print(f"  - Average distance per truck: {zone_data['summary']['total_distance_km'] / zone_data['summary']['total_zones']:.1f} km")
+            print(f"  - Allows {zone_data['summary']['total_zones']} trucks to work simultaneously")
 
 def main():
     print("\n" + "="*70)
@@ -126,11 +126,11 @@ def main():
     try:
         response = requests.get(f"{BASE_URL}/api/stats", timeout=5)
         if response.status_code != 200:
-            print("❌ Server is not healthy!")
+            print("ERROR: Server is not healthy!")
             return
-        print("✅ Server is running\n")
+        print("OK: Server is running\n")
     except requests.exceptions.RequestException as e:
-        print(f"❌ Cannot connect to server: {e}")
+        print(f"ERROR: Cannot connect to server: {e}")
         print("\nPlease start the server first:")
         print("  .\\quickstart.bat")
         return
@@ -146,11 +146,11 @@ def main():
         try:
             test_func()
         except Exception as e:
-            print(f"\n❌ Test '{name}' failed: {e}")
+            print(f"\nERROR: Test '{name}' failed: {e}")
             import traceback
             traceback.print_exc()
     
-    print_section("✅ All Tests Complete!")
+    print_section("OK: All Tests Complete!")
     print("Next steps:")
     print("1. Open http://localhost:5001 to see the dashboard")
     print("2. Generate predictions for tomorrow")

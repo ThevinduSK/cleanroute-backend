@@ -3,7 +3,7 @@ REM CleanRoute Quick Start - CSV Mode (Simplest)
 REM Perfect for demos and testing
 
 echo ╔══════════════════════════════════════════════════════════════╗
-echo ║       🚀 CleanRoute - Quick Start (CSV Mode) 🚀             ║
+echo ║       CleanRoute - Quick Start (CSV Mode)             ║
 echo ╚══════════════════════════════════════════════════════════════╝
 echo.
 
@@ -25,11 +25,11 @@ if not exist "%BACKEND_DIR%\mock_data\bins_config.csv" (
     call .venv\Scripts\activate.bat
     python generate_mock_data.py
     if %errorlevel% neq 0 (
-        echo ❌ Failed to generate mock data
+        echo Failed to generate mock data
         pause
         exit /b 1
     )
-    echo ✅ Mock data generated
+    echo Mock data generated
 )
 
 REM Start frontend
@@ -39,7 +39,7 @@ cd "%FRONTEND_DIR%"
 
 echo.
 echo ════════════════════════════════════════════════════════════════
-echo ✅ Starting CleanRoute Dashboard...
+echo Starting CleanRoute Dashboard...
 echo ════════════════════════════════════════════════════════════════
 echo.
 echo 📍 Dashboard: http://localhost:5001

@@ -142,6 +142,73 @@
                 </button>
             </div>
 
+            <!-- Collection Day Workflow (Admin Only) -->
+            <div class="control-panel" id="collectionDayPanel" style="margin-top: 15px; display: none;">
+                <h2 class="panel-title">
+                    <i class="fas fa-calendar-check"></i> Collection Day
+                </h2>
+                
+                <div id="adminLoginSection">
+                    <div class="control-section">
+                        <label class="control-label">
+                            <i class="fas fa-user-shield"></i> Admin Login
+                        </label>
+                        <input type="text" id="adminUsername" class="control-input" placeholder="Username" style="margin-bottom: 8px;">
+                        <input type="password" id="adminPassword" class="control-input" placeholder="Password">
+                    </div>
+                    <button class="btn btn-primary" onclick="adminLogin()">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                </div>
+                
+                <div id="collectionWorkflow" style="display: none;">
+                    <div style="background: rgba(0,255,136,0.1); border: 1px solid #00ff88; border-radius: 8px; padding: 10px; margin-bottom: 15px;">
+                        <div style="color: #00ff88; font-size: 0.8rem;">Logged in as:</div>
+                        <div style="color: #fff; font-size: 0.9rem; font-weight: bold;" id="loggedInUser">admin</div>
+                    </div>
+                    
+                    <div id="collectionStatus" style="display: none; margin-bottom: 15px;">
+                        <div style="background: rgba(255,170,0,0.1); border: 1px solid #ffaa00; border-radius: 8px; padding: 10px;">
+                            <div style="color: #ffaa00; font-size: 0.8rem;">Collection Status:</div>
+                            <div style="color: #fff; font-size: 0.9rem;" id="collectionStatusText">Not Started</div>
+                            <div style="color: #8892b0; font-size: 0.8rem; margin-top: 5px;">
+                                <span id="binsRespondedText">0</span> / <span id="binsTotalText">0</span> bins responded
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="control-section" style="margin-bottom: 10px;">
+                        <div style="color: #8892b0; font-size: 0.8rem; margin-bottom: 8px;">
+                            <i class="fas fa-info-circle"></i> Select a zone above, then:
+                        </div>
+                    </div>
+                    
+                    <button class="btn" id="btnStartCollection" onclick="startCollection()" 
+                            style="background: linear-gradient(135deg, #00ff88, #00cc6a); width: 100%; margin-bottom: 8px;" disabled>
+                        <i class="fas fa-power-off"></i> 1. Start Collection (Wake Up)
+                    </button>
+                    
+                    <button class="btn" id="btnCheckStatus" onclick="checkCollectionStatus()"
+                            style="background: linear-gradient(135deg, #0088ff, #0066cc); width: 100%; margin-bottom: 8px;" disabled>
+                        <i class="fas fa-sync"></i> 2. Check Status
+                    </button>
+                    
+                    <button class="btn" id="btnFinishCollection" onclick="finishCollection()"
+                            style="background: linear-gradient(135deg, #ffaa00, #ff8800); width: 100%; margin-bottom: 8px;" disabled>
+                        <i class="fas fa-clipboard-check"></i> 3. Finish (Verify)
+                    </button>
+                    
+                    <button class="btn" id="btnEndCollection" onclick="endCollection()"
+                            style="background: linear-gradient(135deg, #ff0055, #cc0044); width: 100%;" disabled>
+                        <i class="fas fa-moon"></i> 4. End Collection (Sleep)
+                    </button>
+                    
+                    <button class="btn btn-secondary" onclick="adminLogout()" style="margin-top: 15px;">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+
             <!-- Route Info -->
             <div class="route-info" id="routeInfo" style="display: none;">
                 <h3 class="route-title">

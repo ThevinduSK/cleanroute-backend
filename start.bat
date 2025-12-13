@@ -3,7 +3,7 @@ REM CleanRoute Startup Script for Windows
 REM Supports both CSV-only mode and Full System mode
 
 echo ╔══════════════════════════════════════════════════════════════╗
-echo ║       🚀 CleanRoute - Smart Waste Management System 🚀      ║
+echo ║       CleanRoute - Smart Waste Management System      ║
 echo ╚══════════════════════════════════════════════════════════════╝
 echo.
 
@@ -13,7 +13,7 @@ set FRONTEND_DIR=%SCRIPT_DIR%frontend
 
 REM Check if virtual environment exists
 if not exist "%BACKEND_DIR%\.venv" (
-    echo ❌ Error: Virtual environment not found at %BACKEND_DIR%\.venv
+    echo Error: Virtual environment not found at %BACKEND_DIR%\.venv
     echo Please run setup.bat first
     pause
     exit /b 1
@@ -39,12 +39,12 @@ echo ═════════════════════════
 
 REM Check if mock data exists
 if not exist "%BACKEND_DIR%\mock_data\bins_config.csv" (
-    echo ❌ Error: Mock data not found
+    echo Error: Mock data not found
     echo Generating mock data now...
     cd "%BACKEND_DIR%"
     call .venv\Scripts\activate.bat
     python generate_mock_data.py
-    echo ✅ Mock data generated
+    echo Mock data generated
 )
 
 REM Set environment for CSV mode
@@ -56,7 +56,7 @@ call .venv\Scripts\activate.bat
 cd "%FRONTEND_DIR%"
 
 echo.
-echo ✅ Starting Flask Frontend...
+echo Starting Flask Frontend...
 echo 📍 Dashboard: http://localhost:5001
 echo 📍 Districts: http://localhost:5001/districts
 echo.
@@ -70,20 +70,20 @@ goto end
 :full_mode
 echo.
 echo ════════════════════════════════════════════════════════════════
-echo 🔧 Starting Full System (Backend + Frontend + MQTT)
+echo Starting Full System (Backend + Frontend + MQTT)
 echo ════════════════════════════════════════════════════════════════
 
 REM Check PostgreSQL
 echo Checking PostgreSQL...
 pg_isready -h localhost -p 5432 >nul 2>&1
 if %errorlevel% equ 0 (
-    echo ✅ PostgreSQL is running
+    echo PostgreSQL is running
 ) else (
     echo ⚠️  PostgreSQL is not running. Checking Docker...
     
     docker ps >nul 2>&1
     if %errorlevel% neq 0 (
-        echo ❌ Docker is not running
+        echo Docker is not running
         echo.
         echo Please either:
         echo   1. Install and start Docker Desktop
@@ -98,7 +98,7 @@ if %errorlevel% equ 0 (
         echo Starting existing PostgreSQL container...
         docker start cleanroute-postgres >nul 2>&1
         timeout /t 3 /nobreak >nul
-        echo ✅ PostgreSQL started
+        echo PostgreSQL started
     ) else (
         echo Creating new PostgreSQL container...
         docker run --name cleanroute-postgres ^
@@ -109,7 +109,7 @@ if %errorlevel% equ 0 (
         
         echo Waiting for PostgreSQL to initialize...
         timeout /t 5 /nobreak >nul
-        echo ✅ PostgreSQL started successfully
+        echo PostgreSQL started successfully
     )
 )
 
@@ -126,14 +126,14 @@ echo.
 echo Starting FastAPI Backend (Port 8000)...
 start /B cmd /c "uvicorn app.main:app --host 0.0.0.0 --port 8000 > ..\backend.log 2>&1"
 timeout /t 2 /nobreak >nul
-echo ✅ Backend API started
+echo Backend API started
 
 REM Check MQTT
 echo.
 echo Checking MQTT Broker...
 tasklist /FI "IMAGENAME eq mosquitto.exe" 2>NUL | find /I /N "mosquitto.exe" >nul
 if %errorlevel% equ 0 (
-    echo ✅ MQTT broker is running
+    echo MQTT broker is running
 ) else (
     echo ⚠️  MQTT broker not running
     echo Start manually if needed: mosquitto -c mqtt/mosquitto_secure.conf
@@ -145,14 +145,14 @@ echo Starting Flask Frontend (Port 5001)...
 cd "%FRONTEND_DIR%"
 start /B cmd /c "python app.py > ..\frontend.log 2>&1"
 timeout /t 2 /nobreak >nul
-echo ✅ Frontend started
+echo Frontend started
 
 echo.
 echo ════════════════════════════════════════════════════════════════
 echo 🎉 System Started Successfully!
 echo ════════════════════════════════════════════════════════════════
 echo.
-echo 📡 Services:
+echo Services:
 echo   - Backend API:  http://localhost:8000
 echo   - Frontend:     http://localhost:5001
 echo   - API Docs:     http://localhost:8000/docs
@@ -161,7 +161,7 @@ echo 📝 Log Files:
 echo   - Backend:      %SCRIPT_DIR%backend.log
 echo   - Frontend:     %SCRIPT_DIR%frontend.log
 echo.
-echo 🛑 To Stop: Run stop.bat
+echo To Stop: Run stop.bat
 echo.
 echo Press any key to open dashboard in browser...
 pause >nul

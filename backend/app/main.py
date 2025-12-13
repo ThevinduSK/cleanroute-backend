@@ -24,14 +24,14 @@ async def lifespan(app: FastAPI):
     Starts MQTT ingest and command publisher on startup, stops on shutdown.
     """
     # Startup
-    print("🚀 Starting CleanRoute Backend...")
+    print("Starting CleanRoute Backend...")
     mqtt_ingest.start_mqtt_ingest()
     mqtt_commands.init_command_client()
     
     yield  # Application runs here
     
     # Shutdown
-    print("🛑 Shutting down CleanRoute Backend...")
+    print("Shutting down CleanRoute Backend...")
     mqtt_ingest.stop_mqtt_ingest()
     mqtt_commands.stop_command_client()
 

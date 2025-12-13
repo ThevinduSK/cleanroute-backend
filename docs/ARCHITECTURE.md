@@ -158,7 +158,7 @@
 
 ## Key Features:
 
-### ✅ IoT Complete:
+### IoT Complete:
 - **Bidirectional**: Telemetry up + Commands down
 - **Device Management**: Registration, monitoring, control
 - **Power Efficient**: Sleep/wake automation
@@ -176,7 +176,7 @@
 - **7 command types**
 - **~2 year battery life**
 
-### 🔧 Technologies:
+### Technologies:
 - **Hardware**: ESP32, HX711, Load cells, Solar
 - **Protocol**: MQTT (QoS 1)
 - **Backend**: FastAPI + Python
