@@ -17,7 +17,7 @@ import requests
 # Add backend to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
-from app.route_optimizer import optimize_route
+from app.route_optimizer import optimize_route, optimize_zone_routes, get_zone_info
 
 app = Flask(__name__)
 CORS(app)
@@ -484,6 +484,122 @@ def get_stats():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zones')
+def get_zones():
+    """Get all zone definitions"""
+    try:
+        zones = get_zone_info()
+        return jsonify(zones)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/zones/<zone_id>')
+def get_zone(zone_id):
+    """Get specific zone information"""
+    try:
+        zone = get_zone_info(zone_id)
+        if zone:
+            return jsonify(zone)
+        else:
+            return jsonify({'error': 'Zone not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/route-by-zone/<target_time>')
+def get_route_by_zone(target_time):
+    """Get optimized routes divided by zones for target time"""
+    try:
+        telemetry_df = load_telemetry()
+        bins = load_bins()
+        
+        # Parse target time
+        target_dt = datetime.strptime(target_time, '%Y-%m-%d-%H-%M')
+        
+        # Get predictions for all bins
+        bins_to_collect = []
+        for bin_data in bins:
+            bin_id = bin_data['bin_id']
+            bin_telemetry = telemetry_df[telemetry_df['bin_id'] == bin_id]
+            
+            if not bin_telemetry.empty:
+                # Predict fill level
+                prediction = predict_bin_fill(bin_telemetry, target_dt)
+                
+                # Only include bins that need collection (>70% full)
+                if prediction['predicted_fill_level'] >= 70:
+                    bins_to_collect.append({
+                        'bin_id': bin_id,
+                        'name': bin_data['location'],
+                        'lat': bin_data['latitude'],
+                        'lon': bin_data['longitude'],
+                        'capacity_l': bin_data['capacity_liters'],
+                        'predicted_fill': prediction['predicted_fill_level'],
+                        'current_fill': bin_data.get('current_fill'),
+                        'confidence': prediction.get('confidence', 'medium')
+                    })
+        
+        # Optimize routes by zone
+        if bins_to_collect:
+            result = optimize_zone_routes(
+                bins_to_collect=bins_to_collect,
+                algorithm="greedy"
+            )
+            
+            # Transform for frontend
+            zones_data = []
+            for zone in result.get('zones', []):
+                waypoints = zone.get('waypoints', [])
+                
+                transformed_waypoints = []
+                for wp in waypoints:
+                    loc = wp.get('location', {})
+                    transformed_waypoints.append({
+                        'type': wp.get('type', 'bin'),
+                        'bin_id': wp.get('bin_id'),
+                        'location': wp.get('name', 'Unknown'),
+                        'latitude': loc.get('lat', 0),
+                        'longitude': loc.get('lon', 0),
+                        'predicted_fill_level': wp.get('predicted_fill', 0),
+                        'distance_from_previous': wp.get('distance_from_prev_km', 0),
+                        'order': wp.get('order', 0)
+                    })
+                
+                zones_data.append({
+                    'zone_id': zone.get('zone_id'),
+                    'zone_name': zone.get('zone_name'),
+                    'zone_color': zone.get('zone_color'),
+                    'depot': zone.get('depot'),
+                    'waypoints': transformed_waypoints,
+                    'path_coordinates': zone.get('path_coordinates', []),
+                    'summary': zone.get('summary', {})
+                })
+            
+            return jsonify({
+                'zones': zones_data,
+                'summary': result.get('summary', {}),
+                'target_time': target_time
+            })
+        else:
+            return jsonify({
+                'zones': [],
+                'summary': {
+                    'total_zones': 0,
+                    'total_bins': 0,
+                    'total_distance_km': 0,
+                    'total_duration_min': 0
+                },
+                'message': 'No bins need collection at this time'
+            })
+    except Exception as e:
+        print(f"ERROR in zone route optimization: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     print("🚀 Starting CleanRoute Frontend...")
