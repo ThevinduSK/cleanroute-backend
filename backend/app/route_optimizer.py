@@ -1,7 +1,8 @@
 """
-Route Optimization Module - Greedy Nearest Neighbor Algorithm
+Route Optimization Module - Zone-Based Routing with Greedy Nearest Neighbor
 
-Generates optimal collection routes for waste bins using greedy nearest-neighbor approach.
+Generates optimal collection routes for waste bins divided into geographic zones.
+Each zone has its own route, allowing multiple trucks to operate simultaneously.
 """
 import logging
 import math
@@ -15,6 +16,54 @@ logger = logging.getLogger(__name__)
 DEFAULT_DEPOT = {"lat": 6.9271, "lon": 79.8612, "name": "Municipal Office"}
 AVERAGE_SPEED_KMH = 30  # Average driving speed in city
 SERVICE_TIME_MINUTES = 5  # Time to empty one bin
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Zone Definitions for Colombo
+# ─────────────────────────────────────────────────────────────────────────────
+COLOMBO_ZONES = {
+    "Zone 1 - Fort & Pettah (Commercial)": {
+        "id": "zone1",
+        "name": "Fort & Pettah (Commercial)",
+        "bounds": {"lat_min": 6.925, "lat_max": 6.940, "lon_min": 79.840, "lon_max": 79.860},
+        "depot": {"lat": 6.9318, "lon": 79.8478, "name": "Fort Depot"},
+        "color": "#FF6B6B"  # Red
+    },
+    "Zone 2 - Slave Island & Kollupitiya (Central)": {
+        "id": "zone2",
+        "name": "Slave Island & Kollupitiya (Central)",
+        "bounds": {"lat_min": 6.910, "lat_max": 6.925, "lon_min": 79.845, "lon_max": 79.865},
+        "depot": {"lat": 6.9185, "lon": 79.8475, "name": "Kollupitiya Depot"},
+        "color": "#4ECDC4"  # Teal
+    },
+    "Zone 3 - Galle Face & Bambalapitiya (Coastal)": {
+        "id": "zone3",
+        "name": "Galle Face & Bambalapitiya (Coastal)",
+        "bounds": {"lat_min": 6.885, "lat_max": 6.910, "lon_min": 79.850, "lon_max": 79.860},
+        "depot": {"lat": 6.9045, "lon": 79.8580, "name": "Galle Face Depot"},
+        "color": "#45B7D1"  # Blue
+    },
+    "Zone 4 - Wellawatta & Dehiwala (South Residential)": {
+        "id": "zone4",
+        "name": "Wellawatta & Dehiwala (South Residential)",
+        "bounds": {"lat_min": 6.830, "lat_max": 6.885, "lon_min": 79.855, "lon_max": 79.870},
+        "depot": {"lat": 6.8568, "lon": 79.8610, "name": "Dehiwala Depot"},
+        "color": "#F7B731"  # Yellow
+    },
+    "Zone 5 - Nugegoda & Kotte (Suburban East)": {
+        "id": "zone5",
+        "name": "Nugegoda & Kotte (Suburban East)",
+        "bounds": {"lat_min": 6.850, "lat_max": 6.920, "lon_min": 79.880, "lon_max": 79.920},
+        "depot": {"lat": 6.8654, "lon": 79.8896, "name": "Nugegoda Depot"},
+        "color": "#5F27CD"  # Purple
+    },
+    "Zone 6 - Borella & Maradana (Northeast)": {
+        "id": "zone6",
+        "name": "Borella & Maradana (Northeast)",
+        "bounds": {"lat_min": 6.915, "lat_max": 6.935, "lon_min": 79.860, "lon_max": 79.880},
+        "depot": {"lat": 6.9183, "lon": 79.8687, "name": "Borella Depot"},
+        "color": "#00D2D3"  # Cyan
+    }
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -260,10 +309,6 @@ def priority_based_route(
     return greedy_nearest_neighbor(sorted_bins, start_location)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Utility Functions
-# ─────────────────────────────────────────────────────────────────────────────
-
 def calculate_route_stats(route: List[Dict[str, Any]]) -> Dict[str, float]:
     """Calculate statistics for a given route."""
     if not route:
@@ -277,3 +322,155 @@ def calculate_route_stats(route: List[Dict[str, Any]]) -> Dict[str, float]:
         "bin_count": bin_count,
         "avg_distance_per_bin_km": total_distance / bin_count if bin_count > 0 else 0
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Zone-Based Routing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def assign_bin_to_zone(lat: float, lon: float) -> Optional[Dict[str, Any]]:
+    """Assign a bin to a zone based on GPS coordinates."""
+    for zone_key, zone in COLOMBO_ZONES.items():
+        bounds = zone['bounds']
+        if (bounds['lat_min'] <= lat <= bounds['lat_max'] and
+            bounds['lon_min'] <= lon <= bounds['lon_max']):
+            return zone
+    
+    # If no zone found, assign to nearest zone by distance to depot
+    min_distance = float('inf')
+    nearest_zone = None
+    
+    for zone_key, zone in COLOMBO_ZONES.items():
+        depot = zone['depot']
+        distance = haversine_distance(lat, lon, depot['lat'], depot['lon'])
+        if distance < min_distance:
+            min_distance = distance
+            nearest_zone = zone
+    
+    return nearest_zone
+
+
+def group_bins_by_zone(bins: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Group bins into zones based on their location."""
+    zones = {}
+    
+    for bin_data in bins:
+        zone = assign_bin_to_zone(bin_data['lat'], bin_data['lon'])
+        if zone:
+            zone_id = zone['id']
+            if zone_id not in zones:
+                zones[zone_id] = {
+                    'zone_info': zone,
+                    'bins': []
+                }
+            zones[zone_id]['bins'].append(bin_data)
+    
+    return zones
+
+
+def optimize_zone_routes(
+    bins_to_collect: List[Dict[str, Any]],
+    algorithm: str = "greedy"
+) -> Dict[str, Any]:
+    """
+    Generate optimized routes for each zone separately.
+    
+    Args:
+        bins_to_collect: List of bins with predictions
+        algorithm: 'greedy' or other algorithms
+    
+    Returns:
+        Dictionary with routes for each zone
+    """
+    if not bins_to_collect:
+        return {
+            "zones": [],
+            "summary": {
+                "total_zones": 0,
+                "total_bins": 0,
+                "total_distance_km": 0,
+                "total_duration_min": 0
+            }
+        }
+    
+    # Group bins by zone
+    zones_data = group_bins_by_zone(bins_to_collect)
+    
+    # Optimize route for each zone
+    zone_routes = []
+    total_distance = 0
+    total_duration = 0
+    total_bins = 0
+    
+    for zone_id, zone_data in zones_data.items():
+        zone_info = zone_data['zone_info']
+        zone_bins = zone_data['bins']
+        
+        if not zone_bins:
+            continue
+        
+        # Use zone-specific depot
+        depot = zone_info['depot']
+        
+        # Generate route for this zone
+        if algorithm == "greedy":
+            waypoints = greedy_nearest_neighbor(zone_bins, depot)
+        else:
+            waypoints = greedy_nearest_neighbor(zone_bins, depot)
+        
+        # Calculate zone statistics
+        zone_distance = waypoints[-1]['cumulative_distance_km'] if waypoints else 0
+        driving_time_min = (zone_distance / AVERAGE_SPEED_KMH) * 60
+        service_time_min = len(zone_bins) * SERVICE_TIME_MINUTES
+        zone_duration = driving_time_min + service_time_min
+        
+        # Extract path coordinates
+        path_coordinates = [
+            [wp['location']['lat'], wp['location']['lon']]
+            for wp in waypoints
+        ]
+        
+        zone_routes.append({
+            "zone_id": zone_id,
+            "zone_name": zone_info['name'],
+            "zone_color": zone_info['color'],
+            "depot": depot,
+            "waypoints": waypoints,
+            "path_coordinates": path_coordinates,
+            "summary": {
+                "total_bins": len(zone_bins),
+                "total_distance_km": round(zone_distance, 2),
+                "driving_time_min": round(driving_time_min, 0),
+                "service_time_min": service_time_min,
+                "estimated_duration_min": round(zone_duration, 0),
+                "average_fill_pct": round(
+                    sum(b['predicted_fill'] for b in zone_bins) / len(zone_bins), 1
+                )
+            }
+        })
+        
+        total_distance += zone_distance
+        total_duration += zone_duration
+        total_bins += len(zone_bins)
+    
+    return {
+        "zones": zone_routes,
+        "summary": {
+            "total_zones": len(zone_routes),
+            "total_bins": total_bins,
+            "total_distance_km": round(total_distance, 2),
+            "total_duration_min": round(total_duration, 0),
+            "algorithm_used": algorithm
+        }
+    }
+
+
+def get_zone_info(zone_id: str = None) -> Dict[str, Any]:
+    """Get information about zones."""
+    if zone_id:
+        for zone_key, zone in COLOMBO_ZONES.items():
+            if zone['id'] == zone_id:
+                return zone
+        return None
+    else:
+        return list(COLOMBO_ZONES.values())

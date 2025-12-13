@@ -298,7 +298,7 @@ function updateBinMarkerWithPrediction(prediction) {
     marker.setPopupContent(popupContent);
 }
 
-// Optimize collection route
+// Optimize collection route (ZONE-BASED)
 async function optimizeRoute() {
     const dateInput = document.getElementById('predictionDate').value;
     const timeInput = document.getElementById('predictionTime').value;
@@ -313,22 +313,23 @@ async function optimizeRoute() {
     showLoading(true);
     
     try {
-        const response = await fetch(`/api/route/${targetTime}`);
-        const route = await response.json();
+        // Use zone-based routing endpoint
+        const response = await fetch(`/api/route-by-zone/${targetTime}`);
+        const data = await response.json();
         
-        if (route.bins_count === 0) {
+        if (!data.zones || data.zones.length === 0) {
             showNotification('No bins need collection at this time', 'info');
             document.getElementById('routeInfo').style.display = 'none';
             return;
         }
         
-        // Display route on map
-        displayRoute(route);
+        // Display all zone routes on map
+        displayZoneRoutes(data);
         
-        // Show route info panel
-        displayRouteInfo(route);
+        // Show route info panel with zone summary
+        displayZoneRouteInfo(data);
         
-        showNotification(`Route optimized: ${route.bins_count} bins, ${route.total_distance_km.toFixed(1)} km`, 'success');
+        showNotification(`Zone routes optimized: ${data.summary.total_zones} zones, ${data.summary.total_bins} bins, ${data.summary.total_distance_km.toFixed(1)} km`, 'success');
         
     } catch (error) {
         console.error('Error optimizing route:', error);
@@ -338,7 +339,180 @@ async function optimizeRoute() {
     }
 }
 
-// Display route on map
+// Display zone routes on map
+let zoneRouteLines = [];
+let zoneMarkers = [];
+
+function displayZoneRoutes(data) {
+    // Remove existing routes and markers
+    zoneRouteLines.forEach(line => map.removeLayer(line));
+    zoneMarkers.forEach(marker => map.removeLayer(marker));
+    zoneRouteLines = [];
+    zoneMarkers = [];
+    
+    // Draw each zone's route in its own color
+    data.zones.forEach((zone, zoneIndex) => {
+        // Create route line for this zone
+        const waypoints = zone.path_coordinates;
+        
+        const routeLine = L.polyline(waypoints, {
+            color: zone.zone_color,
+            weight: 5,
+            opacity: 0.8,
+            dashArray: '10, 10',
+            lineJoin: 'round'
+        }).addTo(map);
+        
+        zoneRouteLines.push(routeLine);
+        
+        // Add depot marker for this zone
+        const depotIcon = L.divIcon({
+            className: 'depot-marker',
+            html: `
+                <div style="
+                    width: 40px;
+                    height: 40px;
+                    background: ${zone.zone_color};
+                    border: 4px solid #fff;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: bold;
+                    font-size: 18px;
+                    color: #000;
+                    box-shadow: 0 0 25px ${zone.zone_color};
+                ">🏢</div>
+            `,
+            iconSize: [40, 40],
+            iconAnchor: [20, 20]
+        });
+        
+        const depotMarker = L.marker([zone.depot.lat, zone.depot.lon], { icon: depotIcon })
+            .addTo(map)
+            .bindPopup(`
+                <div class="popup-content">
+                    <div class="popup-title">${zone.zone_name}</div>
+                    <div class="popup-subtitle">${zone.depot.name}</div>
+                    <div class="popup-info">
+                        <span class="popup-label">Bins:</span>
+                        <span class="popup-value">${zone.summary.total_bins}</span>
+                    </div>
+                    <div class="popup-info">
+                        <span class="popup-label">Distance:</span>
+                        <span class="popup-value">${zone.summary.total_distance_km} km</span>
+                    </div>
+                    <div class="popup-info">
+                        <span class="popup-label">Time:</span>
+                        <span class="popup-value">${zone.summary.estimated_duration_min} min</span>
+                    </div>
+                </div>
+            `);
+        
+        zoneMarkers.push(depotMarker);
+        
+        // Add numbered waypoint markers for bins in this zone
+        let stopNumber = 1;
+        zone.waypoints.forEach((wp) => {
+            if (wp.type === 'bin') {
+                const numberIcon = L.divIcon({
+                    className: 'route-number-marker',
+                    html: `
+                        <div style="
+                            width: 32px;
+                            height: 32px;
+                            background: ${zone.zone_color};
+                            border: 3px solid #fff;
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-weight: bold;
+                            font-size: 14px;
+                            color: #000;
+                            box-shadow: 0 0 20px ${zone.zone_color};
+                        ">${stopNumber}</div>
+                    `,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+                
+                const marker = L.marker([wp.latitude, wp.longitude], { icon: numberIcon })
+                    .addTo(map)
+                    .bindPopup(`
+                        <div class="popup-content">
+                            <div class="popup-title">${zone.zone_name}</div>
+                            <div class="popup-subtitle">Stop ${stopNumber}: ${wp.location}</div>
+                            <div class="popup-info">
+                                <span class="popup-label">Bin ID:</span>
+                                <span class="popup-value">${wp.bin_id || 'N/A'}</span>
+                            </div>
+                            <div class="popup-info">
+                                <span class="popup-label">Predicted Fill:</span>
+                                <span class="popup-value">${Math.round(wp.predicted_fill_level)}%</span>
+                            </div>
+                            <div class="popup-info">
+                                <span class="popup-label">Distance from previous:</span>
+                                <span class="popup-value">${wp.distance_from_previous.toFixed(2)} km</span>
+                            </div>
+                        </div>
+                    `);
+                
+                zoneMarkers.push(marker);
+                stopNumber++;
+            }
+        });
+    });
+    
+    // Fit map to show all routes
+    if (zoneRouteLines.length > 0) {
+        const allBounds = zoneRouteLines.map(line => line.getBounds());
+        const combinedBounds = allBounds.reduce((acc, bounds) => acc.extend(bounds), L.latLngBounds(allBounds[0]));
+        map.fitBounds(combinedBounds, { padding: [50, 50] });
+    }
+}
+
+// Display zone route information panel
+function displayZoneRouteInfo(data) {
+    const routeInfo = document.getElementById('routeInfo');
+    const routeDetails = document.getElementById('routeDetails');
+    
+    const summary = data.summary;
+    
+    let html = `
+        <div style="margin-bottom: 20px; padding: 15px; background: rgba(0, 255, 136, 0.1); border-radius: 8px; border: 1px solid #00ff88;">
+            <h3 style="margin: 0 0 10px 0; color: #00ff88;">📊 Overall Summary</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div><strong>Active Zones:</strong> ${summary.total_zones}</div>
+                <div><strong>Total Bins:</strong> ${summary.total_bins}</div>
+                <div><strong>Total Distance:</strong> ${summary.total_distance_km} km</div>
+                <div><strong>Total Time:</strong> ${Math.round(summary.total_duration_min)} min</div>
+            </div>
+        </div>
+    `;
+    
+    data.zones.forEach((zone, index) => {
+        html += `
+            <div style="margin-bottom: 15px; padding: 12px; background: rgba(0, 0, 0, 0.3); border-radius: 8px; border-left: 4px solid ${zone.zone_color};">
+                <h4 style="margin: 0 0 10px 0; color: ${zone.zone_color};">
+                    🚛 ${zone.zone_name}
+                </h4>
+                <div style="font-size: 0.9em;">
+                    <div><strong>Depot:</strong> ${zone.depot.name}</div>
+                    <div><strong>Bins:</strong> ${zone.summary.total_bins}</div>
+                    <div><strong>Distance:</strong> ${zone.summary.total_distance_km} km</div>
+                    <div><strong>Time:</strong> ${zone.summary.estimated_duration_min} min</div>
+                    <div><strong>Avg Fill:</strong> ${zone.summary.average_fill_pct}%</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    routeDetails.innerHTML = html;
+    routeInfo.style.display = 'block';
+}
+
+// Display route on map (OLD - keep for backward compatibility)
 function displayRoute(route) {
     // Remove existing route
     if (routeLine) {
@@ -425,16 +599,29 @@ function displayRouteInfo(route) {
 
 // Reset view to default
 function resetView() {
-    // Remove route
+    // Remove old single route
     if (routeLine) {
         map.removeLayer(routeLine);
         routeLine = null;
     }
     
+    // Remove zone routes
+    if (zoneRouteLines) {
+        zoneRouteLines.forEach(line => map.removeLayer(line));
+        zoneRouteLines = [];
+    }
+    
+    // Remove zone markers
+    if (zoneMarkers) {
+        zoneMarkers.forEach(marker => map.removeLayer(marker));
+        zoneMarkers = [];
+    }
+    
     // Remove route markers
     map.eachLayer(layer => {
         if (layer instanceof L.Marker && layer.options.icon && 
-            layer.options.icon.options.className === 'route-number-marker') {
+            (layer.options.icon.options.className === 'route-number-marker' ||
+             layer.options.icon.options.className === 'depot-marker')) {
             map.removeLayer(layer);
         }
     });
