@@ -66,6 +66,10 @@ def on_connect(client, userdata, flags, rc):
             ("cleanroute/bins/+/diagnostic", 1),     # Diagnostic responses
             ("cleanroute/bins/+/firmware_status", 1), # Firmware update progress
             ("cleanroute/bins/+/shadow/reported", 1), # Shadow state updates
+            # ESP32 device topics (alternate format)
+            ("bins/+/telemetry", 1),                 # ESP32 telemetry
+            ("bins/+/heartbeat", 1),                 # ESP32 heartbeats
+            ("bins/+/diagnostic", 1),                # ESP32 diagnostics
         ]
         for topic, qos in iot_topics:
             client.subscribe(topic, qos=qos)
@@ -92,20 +96,31 @@ def on_message(client, userdata, msg):
     try:
         # Parse topic to determine message type
         # Topic formats:
-        # - cleanroute/bins/<BIN_ID>/telemetry
+        # - cleanroute/bins/<BIN_ID>/telemetry (original)
         # - cleanroute/bins/<BIN_ID>/heartbeat
         # - cleanroute/bins/<BIN_ID>/ack
         # - cleanroute/bins/<BIN_ID>/diagnostic
         # - cleanroute/bins/<BIN_ID>/firmware_status
         # - cleanroute/bins/<BIN_ID>/shadow/reported
+        # - bins/<BIN_ID>/telemetry (ESP32 format)
+        # - bins/<BIN_ID>/heartbeat (ESP32 format)
         
         topic_parts = msg.topic.split("/")
-        if len(topic_parts) < 4:
+        
+        # Handle both topic formats:
+        # - cleanroute/bins/<BIN_ID>/<type> (4+ parts, bin_id at index 2)
+        # - bins/<BIN_ID>/<type> (3 parts, bin_id at index 1)
+        if len(topic_parts) >= 4 and topic_parts[0] == "cleanroute":
+            # Original format: cleanroute/bins/<BIN_ID>/<type>
+            bin_id = topic_parts[2]
+            message_type = topic_parts[3]
+        elif len(topic_parts) >= 3 and topic_parts[0] == "bins":
+            # ESP32 format: bins/<BIN_ID>/<type>
+            bin_id = topic_parts[1]
+            message_type = topic_parts[2]
+        else:
             logger.warning(f"Invalid topic format: {msg.topic}")
             return
-        
-        bin_id = topic_parts[2]
-        message_type = topic_parts[3]
         
         # Parse JSON payload
         payload = json.loads(msg.payload.decode("utf-8"))
@@ -134,19 +149,28 @@ def on_message(client, userdata, msg):
 
 
 def handle_telemetry(bin_id: str, payload: dict):
-    """Handle telemetry messages from bins."""
+    """Handle telemetry messages from bins.
+    
+    Supports two payload formats:
+    - Original: {ts, fill_pct, batt_v, temp_c, lat, lon}
+    - ESP32:    {timestamp, fill_level, battery_level, temperature, bin_id}
+    """
     global message_count
     
-    # Extract required fields
-    ts = payload.get("ts")
+    # Extract timestamp - support both field names
+    ts = payload.get("ts") or payload.get("timestamp")
+    
+    # Extract fill percentage - support both field names
     fill_pct = payload.get("fill_pct")
+    if fill_pct is None:
+        fill_pct = payload.get("fill_level")  # ESP32 format
     
     # Validate required fields
     if ts is None:
         logger.warning(f"Missing timestamp in message from {bin_id}")
         return
     if fill_pct is None:
-        logger.warning(f"Missing fill_pct in message from {bin_id}")
+        logger.warning(f"Missing fill_pct/fill_level in message from {bin_id}")
         return
     
     # Validate fill_pct range
@@ -161,9 +185,19 @@ def handle_telemetry(bin_id: str, payload: dict):
         logger.warning(f"Invalid timestamp format from {bin_id}: {ts}")
         return
     
-    # Extract optional fields
+    # Extract optional fields - support both original and ESP32 formats
     batt_v = payload.get("batt_v")
+    if batt_v is None:
+        # ESP32 sends battery_level as percentage (0-100), convert to voltage estimate
+        batt_level = payload.get("battery_level")
+        if batt_level is not None:
+            # Approximate: 100% = 4.2V, 0% = 3.0V (linear scale)
+            batt_v = 3.0 + (batt_level / 100.0) * 1.2
+    
     temp_c = payload.get("temp_c")
+    if temp_c is None:
+        temp_c = payload.get("temperature")  # ESP32 format
+    
     emptied = bool(payload.get("emptied", 0))
     lat = payload.get("lat")
     lon = payload.get("lon")
@@ -221,10 +255,16 @@ def handle_telemetry(bin_id: str, payload: dict):
 
 
 def handle_heartbeat(bin_id: str, payload: dict):
-    """Handle heartbeat messages from devices."""
+    """Handle heartbeat messages from devices.
+    
+    Supports two payload formats:
+    - Original: {rssi, uptime_seconds, free_memory_kb, firmware_version}
+    - ESP32:    {rssi_dbm, uptime_seconds, timestamp, bin_id}
+    """
     global message_count
     
-    rssi = payload.get("rssi")
+    # Support both rssi and rssi_dbm field names
+    rssi = payload.get("rssi") or payload.get("rssi_dbm")
     uptime = payload.get("uptime_seconds")
     free_memory = payload.get("free_memory_kb")
     firmware_version = payload.get("firmware_version")

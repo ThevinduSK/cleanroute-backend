@@ -1502,6 +1502,21 @@ async def get_iot_metrics():
                 WHERE received_at > NOW() - INTERVAL '24 hours'
             """)
             heartbeat_stats = cur.fetchone()
+            
+            # Temperature monitoring (from telemetry)
+            cur.execute("""
+                SELECT 
+                    AVG(temp_c) as avg_temp,
+                    MIN(temp_c) as min_temp,
+                    MAX(temp_c) as max_temp,
+                    COUNT(*) FILTER (WHERE temp_c > 45) as overheating_count,
+                    COUNT(*) FILTER (WHERE temp_c > 35 AND temp_c <= 45) as warm_count,
+                    COUNT(DISTINCT bin_id) FILTER (WHERE temp_c > 45) as overheating_devices
+                FROM telemetry
+                WHERE received_at > NOW() - INTERVAL '24 hours'
+                AND temp_c IS NOT NULL
+            """)
+            temp_stats = cur.fetchone()
         
         # Calculate derived metrics
         ack_rate = 0.0
@@ -1558,6 +1573,16 @@ async def get_iot_metrics():
                 "low_battery_devices": battery_stats['low_battery_count'] if battery_stats else 0,
                 "power_mode_supported": True,
                 "sleep_mode_enabled": True
+            },
+            
+            # Temperature Monitoring
+            "temperature": {
+                "avg_temp_c": round(temp_stats['avg_temp'] or 0, 1) if temp_stats else 0,
+                "min_temp_c": round(temp_stats['min_temp'] or 0, 1) if temp_stats else 0,
+                "max_temp_c": round(temp_stats['max_temp'] or 0, 1) if temp_stats else 0,
+                "overheating_readings": temp_stats['overheating_count'] if temp_stats else 0,
+                "warm_readings": temp_stats['warm_count'] if temp_stats else 0,
+                "overheating_devices": temp_stats['overheating_devices'] if temp_stats else 0
             },
             
             # Network Performance (from heartbeats)
